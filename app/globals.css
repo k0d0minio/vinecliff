@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand palette — warm heritage estate on Lake Erie */
+  --color-cream: #f7f2e7;
+  --color-cream-100: #fbf8f0;
+  --color-parchment: #efe6d3;
+  --color-ink: #23271d;
+  --color-ink-soft: #3c4235;
+
+  --color-pine-50: #eef2ec;
+  --color-pine-100: #cfdac8;
+  --color-pine-400: #5a7860;
+  --color-pine-600: #33513e;
+  --color-pine-700: #294032;
+  --color-pine-900: #1a2a20;
+
+  --color-amber: #c8812f;
+  --color-amber-soft: #dda657;
+  --color-lake: #3a807d;
+  --color-lake-soft: #6faaa4;
+  --color-stone: #8a8472;
+
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif), Georgia, "Times New Roman", serif;
+
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+
+  --shadow-soft: 0 1px 2px rgba(35, 39, 29, 0.04), 0 12px 40px -12px rgba(35, 39, 29, 0.22);
+  --shadow-lift: 0 2px 4px rgba(35, 39, 29, 0.06), 0 30px 60px -24px rgba(35, 39, 29, 0.32);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-pine-600);
+  color: var(--color-cream);
+}
+
+/* Refined heading defaults */
+.font-display {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* Subtle grain / texture helpers */
+.text-balance {
+  text-wrap: balance;
+}
+.text-pretty {
+  text-wrap: pretty;
+}
+
+/* Thin uppercase eyebrow */
+.eyebrow {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-weight: 500;
+  font-size: 0.72rem;
+}
+
+/* Custom scrollbar */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-cream);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-pine-100);
+    border-radius: 999px;
+    border: 2px solid var(--color-cream);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-pine-400);
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
