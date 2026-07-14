@@ -21,6 +21,10 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: site.fullName }],
   creator: site.fullName,
+  // Open Graph image, Twitter image and icons are provided by the file
+  // conventions in app/ (opengraph-image.jpg, twitter-image.jpg, icon.svg,
+  // apple-icon.png). Next infers their exact dimensions, type and absolute
+  // URLs from metadataBase automatically.
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -28,26 +32,19 @@ export const metadata: Metadata = {
     siteName: site.fullName,
     title: `${site.fullName} — ${site.tagline}`,
     description: site.description,
-    images: [
-      {
-        url: "/img/aerial-shot.jpg",
-        width: 1200,
-        height: 800,
-        alt: "Aerial view of the Vine Cliff estate above Lake Erie",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: `${site.fullName} — ${site.tagline}`,
     description: site.description,
-    images: ["/img/aerial-shot.jpg"],
-  },
-  icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
   },
   alternates: {
-    canonical: site.url,
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
   },
 };
 
