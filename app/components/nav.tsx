@@ -1,22 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { site } from "@/lib/site";
 import { buttonVariants } from "./ui/button";
 
-const links = [
-  { href: "#spaces", label: "The Spaces" },
-  { href: "#estate", label: "The Estate" },
-  { href: "#gallery", label: "Gallery" },
-  { href: "#location", label: "Location" },
+// Section anchors live on the home page. `hash` is prefixed with "/" when the
+// nav is rendered on a sub-page so the links jump back to the landing page.
+const sectionLinks = [
+  { hash: "#spaces", label: "The Spaces" },
+  { hash: "#estate", label: "The Estate" },
+  { hash: "#gallery", label: "Gallery" },
+  { hash: "#location", label: "Location" },
 ];
 
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const onHome = pathname === "/";
+
+  const sectionHref = (hash: string) => (onHome ? hash : `/${hash}`);
+  const links = [
+    ...sectionLinks.map((l) => ({ href: sectionHref(l.hash), label: l.label })),
+    { href: "/history", label: "History" },
+  ];
+  const homeHref = onHome ? "#top" : "/";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -49,7 +61,7 @@ export function Nav() {
       >
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:h-20 sm:px-8">
           <a
-            href="#top"
+            href={homeHref}
             className={cn(
               "font-display text-xl font-medium tracking-tight transition-colors sm:text-2xl",
               scrolled ? "text-pine-900" : "text-cream"
