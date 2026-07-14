@@ -17,7 +17,7 @@ export const site = {
   },
   mapUrl:
     "https://www.google.com/maps/search/?api=1&query=6153+Rte.+5+Brocton+NY+14716",
-  url: "https://vinecliff.com",
+  url: "https://vinecliff.vercel.app",
 } as const;
 
 export type Space = {
