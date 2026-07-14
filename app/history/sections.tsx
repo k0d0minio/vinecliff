@@ -114,16 +114,16 @@ export function HistoryTimeline() {
         <Stagger className="mt-14 space-y-0">
           {timeline.map((e, i) => (
             <StaggerItem key={e.year}>
-              <div className="group relative grid grid-cols-[4.5rem_1fr] gap-4 sm:grid-cols-[7rem_1fr] sm:gap-8">
+              <div className="group relative grid grid-cols-[4.5rem_1fr] gap-7 sm:grid-cols-[7rem_1fr] sm:gap-14">
                 {/* year rail */}
                 <div className="text-right">
                   <span className="font-display text-lg text-pine-700 sm:text-xl">{e.year}</span>
                 </div>
                 {/* line + node */}
-                <div className="relative pb-10">
-                  <span className="absolute -left-4 top-1.5 size-3 rounded-full border-2 border-amber bg-cream sm:-left-[2.05rem]" />
+                <div className="relative pb-12">
+                  <span className="absolute -left-[1.38rem] top-1.5 size-3 rounded-full border-2 border-amber bg-cream sm:-left-[2.28rem]" />
                   {i < timeline.length - 1 && (
-                    <span className="absolute -left-[0.7rem] top-4 h-full w-px bg-pine-900/15 sm:-left-[1.55rem]" />
+                    <span className="absolute -left-4 top-4 h-full w-px bg-pine-900/15 sm:-left-[1.9rem]" />
                   )}
                   <h3 className="font-display text-xl text-pine-900">{e.title}</h3>
                   <p className="mt-2 text-pretty leading-relaxed text-ink-soft">
