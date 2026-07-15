@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { ADMIN_SESSION_COOKIE, isValidAdminSession } from "@/lib/admin-auth";
+import {
+  ADMIN_SESSION_COOKIE,
+  authSecret,
+  verifySessionToken,
+} from "@/lib/auth/session";
 
 // Gate every /admin route behind a valid session cookie. The login page and
 // its assets stay public so an unauthenticated visitor can actually sign in.
+// Validation only needs the signing secret, so this runs on the Edge without
+// ever touching the database.
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
@@ -12,7 +18,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  if (await isValidAdminSession(token)) {
+  if (await verifySessionToken(token, authSecret())) {
     return NextResponse.next();
   }
 

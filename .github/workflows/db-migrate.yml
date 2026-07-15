@@ -1,0 +1,39 @@
+name: Database migrations
+
+# Applies pending Drizzle migrations to the production Neon database whenever
+# changes land on main (i.e. when a PR is merged). Also runnable on demand from
+# the Actions tab.
+#
+# Requires a repository secret named DATABASE_URL holding the Neon connection
+# string (the same value Vercel uses for production).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two migration jobs at once against the same database.
+concurrency:
+  group: db-migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
