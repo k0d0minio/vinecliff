@@ -1,10 +1,13 @@
 import { LogOut, ShieldCheck } from "lucide-react";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { getNotifyEmail, getCancellationPolicy } from "@/lib/settings";
 import { buttonVariants } from "../../../components/ui/button";
 import { PageHeader, Card } from "../components/page-shell";
 import { logout } from "../actions";
+import { SettingsForm } from "./settings-form";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
 
 const details = [
@@ -14,13 +17,28 @@ const details = [
   { label: "Address", value: site.address.full },
 ];
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const [notifyEmail, cancellationPolicy] = await Promise.all([
+    getNotifyEmail(),
+    getCancellationPolicy(),
+  ]);
+
   return (
     <div className="space-y-8">
       <PageHeader
         title="Settings"
-        description="Business details and admin access. Editing will be enabled here soon."
+        description="Estate-wide knobs for the booking system, plus business details and admin access."
       />
+
+      <Card>
+        <h2 className="font-display text-lg text-ink">Booking system</h2>
+        <div className="mt-4">
+          <SettingsForm
+            notifyEmail={notifyEmail}
+            cancellationPolicy={cancellationPolicy ?? ""}
+          />
+        </div>
+      </Card>
 
       <Card>
         <h2 className="font-display text-lg text-ink">Business details</h2>

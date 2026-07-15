@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRef } from "react";
 import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
 import { Phone, CalendarHeart } from "lucide-react";
@@ -37,7 +38,7 @@ export function BookingCta() {
         <Reveal>
           <span className="inline-flex items-center gap-2 rounded-full border border-cream/25 bg-cream/10 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-cream backdrop-blur">
             <CalendarHeart className="size-3.5" />
-            Online booking coming soon
+            Online booking now open
           </span>
         </Reveal>
         <Reveal delay={0.1}>
@@ -47,23 +48,27 @@ export function BookingCta() {
         </Reveal>
         <Reveal delay={0.2}>
           <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-relaxed text-cream/85 sm:text-lg">
-            Weeks and weekends fill quickly, and event dates even faster. Get in touch to check
-            availability and hold your dates at Vine Cliff.
+            Weeks and weekends fill quickly, and event dates even faster. Check live availability
+            and request your dates online — we review every booking personally.
           </p>
         </Reveal>
         <Reveal delay={0.3}>
           <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">
-            <a href={site.phoneHref} className={cn(buttonVariants({ variant: "amber", size: "lg" }))}>
-              <Phone className="size-4" />
+            <a href="#spaces" className={cn(buttonVariants({ variant: "amber", size: "lg" }))}>
+              <CalendarHeart className="size-4" />
+              Check availability & book
+            </a>
+            <Link href="/enquire" className={cn(buttonVariants({ variant: "light", size: "lg" }))}>
+              Send an enquiry
+            </Link>
+          </div>
+          <p className="mt-6 text-sm text-cream/70">
+            Prefer to talk it through?{" "}
+            <a href={site.phoneHref} className="inline-flex items-center gap-1.5 font-medium text-cream underline-offset-4 hover:underline">
+              <Phone className="size-3.5" />
               {site.phone}
             </a>
-            <a
-              href={`mailto:${site.email}`}
-              className={cn(buttonVariants({ variant: "light", size: "lg" }))}
-            >
-              Send an enquiry
-            </a>
-          </div>
+          </p>
         </Reveal>
       </div>
     </section>
