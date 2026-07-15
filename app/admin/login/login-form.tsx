@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Lock, AlertCircle, Loader2 } from "lucide-react";
+import { Lock, Mail, AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "../../components/ui/button";
 import { login, type LoginState } from "./actions";
@@ -36,6 +36,28 @@ export function LoginForm({ from }: { from?: string }) {
 
       <div className="space-y-2">
         <label
+          htmlFor="email"
+          className="block text-sm font-medium text-ink-soft"
+        >
+          Email
+        </label>
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-stone" />
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            autoFocus
+            required
+            placeholder="you@example.com"
+            className="h-12 w-full rounded-full border border-pine-100 bg-cream-100 pl-11 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-stone/70 focus:border-pine-400 focus:ring-2 focus:ring-pine-600/20"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label
           htmlFor="password"
           className="block text-sm font-medium text-ink-soft"
         >
@@ -48,9 +70,8 @@ export function LoginForm({ from }: { from?: string }) {
             name="password"
             type="password"
             autoComplete="current-password"
-            autoFocus
             required
-            placeholder="Enter the admin password"
+            placeholder="Enter your password"
             className="h-12 w-full rounded-full border border-pine-100 bg-cream-100 pl-11 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-stone/70 focus:border-pine-400 focus:ring-2 focus:ring-pine-600/20"
           />
         </div>

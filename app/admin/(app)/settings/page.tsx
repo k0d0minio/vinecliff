@@ -47,9 +47,9 @@ export default function SettingsPage() {
           <div>
             <h2 className="font-display text-lg text-ink">Access</h2>
             <p className="mt-1 text-sm text-ink-soft">
-              Admin access is protected by a shared password. To change it,
-              update the <code className="rounded bg-pine-50 px-1.5 py-0.5 text-xs text-pine-700">ADMIN_PASSWORD</code>{" "}
-              environment variable — existing sessions end automatically.
+              Admin access is tied to individual accounts, each signing in with
+              their own email and password. Accounts are stored in the estate
+              database; account management will be available here soon.
             </p>
           </div>
         </div>
