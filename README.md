@@ -37,14 +37,36 @@ Open [http://localhost:3000](http://localhost:3000).
 app/
   components/     Nav, Footer, motion primitives, UI, in-view hook
   sections/       Hero, Estate, Spaces, Gallery, Location, Booking CTA
+  admin/          Password-gated admin section (login + dashboard shell)
   fonts/          Self-hosted variable fonts
   layout.tsx      Metadata, SEO, JSON-LD, fonts
   page.tsx        Landing page composition
 lib/
   site.ts         Business info, spaces, gallery & nearby data
+  admin.ts        Admin navigation config
+  admin-auth.ts   Session-token helpers for the admin password gate
   utils.ts        cn() helper
+middleware.ts     Protects /admin routes behind the login cookie
 public/img/       Estate photography
 ```
+
+## Admin section
+
+A private, mobile-responsive admin area lives at `/admin`. It's the foundation
+for managing bookings, enquiries and site content — the pages are scaffolded
+now and will be wired to real data later.
+
+Access is gated by a single shared password. Set it before running:
+
+```bash
+ADMIN_PASSWORD="choose-a-strong-password"
+```
+
+Add it to `.env.local` for development and to the hosting provider's
+environment variables in production. Every `/admin` route is protected by
+`middleware.ts`; visitors are redirected to `/admin/login` until they sign in.
+The session is stored in an httpOnly cookie derived from the password, so
+changing (or unsetting) `ADMIN_PASSWORD` immediately ends all sessions.
 
 ## Design notes
 
