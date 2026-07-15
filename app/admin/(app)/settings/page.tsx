@@ -1,0 +1,69 @@
+import { LogOut, ShieldCheck } from "lucide-react";
+import { site } from "@/lib/site";
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "../../../components/ui/button";
+import { PageHeader, Card } from "../components/page-shell";
+import { logout } from "../actions";
+
+export const metadata = { title: "Settings" };
+
+const details = [
+  { label: "Business name", value: site.fullName },
+  { label: "Phone", value: site.phone },
+  { label: "Email", value: site.email },
+  { label: "Address", value: site.address.full },
+];
+
+export default function SettingsPage() {
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title="Settings"
+        description="Business details and admin access. Editing will be enabled here soon."
+      />
+
+      <Card>
+        <h2 className="font-display text-lg text-ink">Business details</h2>
+        <dl className="mt-4 divide-y divide-pine-100">
+          {details.map((row) => (
+            <div
+              key={row.label}
+              className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <dt className="text-sm text-stone">{row.label}</dt>
+              <dd className="text-sm font-medium text-ink sm:text-right">
+                {row.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
+
+      <Card>
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-pine-50 text-pine-600">
+            <ShieldCheck className="size-5" />
+          </div>
+          <div>
+            <h2 className="font-display text-lg text-ink">Access</h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              Admin access is protected by a shared password. To change it,
+              update the <code className="rounded bg-pine-50 px-1.5 py-0.5 text-xs text-pine-700">ADMIN_PASSWORD</code>{" "}
+              environment variable — existing sessions end automatically.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <form action={logout}>
+        <button
+          type="submit"
+          className={cn(buttonVariants({ variant: "outline", size: "md" }))}
+        >
+          <LogOut className="size-4" />
+          Sign out
+        </button>
+      </form>
+    </div>
+  );
+}
