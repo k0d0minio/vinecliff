@@ -4,10 +4,12 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   CalendarDays,
+  CalendarRange,
   Inbox,
   Home,
   ImageIcon,
   Settings,
+  Users,
 } from "lucide-react";
 
 export type AdminNavItem = {
@@ -29,7 +31,19 @@ export const adminNav: AdminNavItem[] = [
     href: "/admin/bookings",
     label: "Bookings",
     icon: CalendarDays,
-    description: "Stays and event reservations across the calendar.",
+    description: "Requests to review, plus every stay and event.",
+  },
+  {
+    href: "/admin/calendar",
+    label: "Calendar",
+    icon: CalendarRange,
+    description: "Month view across all spaces, with blackout dates.",
+  },
+  {
+    href: "/admin/guests",
+    label: "Guests",
+    icon: Users,
+    description: "Everyone who has stayed or asked to, with notes.",
   },
   {
     href: "/admin/enquiries",

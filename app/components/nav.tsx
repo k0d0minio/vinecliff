@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Menu, X, Phone } from "lucide-react";
+import { Menu, X, Phone, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { site } from "@/lib/site";
 import { buttonVariants } from "./ui/button";
@@ -92,15 +93,15 @@ export function Nav() {
                 <span className="absolute -bottom-1 left-0 h-px w-0 bg-current transition-all duration-300 group-hover:w-full" />
               </a>
             ))}
-            <a
-              href={site.phoneHref}
+            <Link
+              href="/enquire"
               className={cn(
                 buttonVariants({ variant: scrolled ? "primary" : "light", size: "sm" })
               )}
             >
-              <Phone className="size-3.5" />
+              <Send className="size-3.5" />
               Enquire
-            </a>
+            </Link>
           </div>
 
           <button
@@ -155,11 +156,19 @@ export function Nav() {
                 </motion.li>
               ))}
             </motion.ul>
-            <div className="px-6 pt-10">
+            <div className="space-y-3 px-6 pt-10">
+              <Link
+                href="/enquire"
+                onClick={() => setOpen(false)}
+                className={cn(buttonVariants({ variant: "amber", size: "lg" }), "w-full")}
+              >
+                <Send className="size-4" />
+                Send an enquiry
+              </Link>
               <a
                 href={site.phoneHref}
                 onClick={() => setOpen(false)}
-                className={cn(buttonVariants({ variant: "amber", size: "lg" }), "w-full")}
+                className={cn(buttonVariants({ variant: "light", size: "lg" }), "w-full")}
               >
                 <Phone className="size-4" />
                 Call to enquire
