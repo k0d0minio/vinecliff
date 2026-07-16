@@ -37,6 +37,9 @@ Open [http://localhost:3000](http://localhost:3000).
 - `npm test` — unit tests for the booking domain logic (dates, pricing, availability)
 - `npm run db:generate` — generate SQL migrations from `lib/db/schema.ts`
 - `npm run db:migrate` — apply pending migrations to `DATABASE_URL`
+- `npm run db:seed:demo` — fill the database with realistic demo data (guests,
+  bookings, blackouts, enquiries) for showing the platform off; re-run any time
+  to refresh it, or add `-- --reset` to remove it again
 - `npm run db:studio` — open Drizzle Studio against the database
 
 ## The booking platform
@@ -109,6 +112,7 @@ lib/
 tests/            Unit tests for the booking domain (node:test via tsx)
 scripts/
   migrate.ts      Applies pending migrations (used by CI and `db:migrate`)
+  seed-demo.ts    Fills the DB with demo guests, bookings, blackouts & enquiries
 drizzle/          Generated SQL migrations + seeds
 middleware.ts     Protects /admin routes behind the login cookie
 public/img/       Estate photography
