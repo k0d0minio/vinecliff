@@ -2,7 +2,7 @@
 
 Open work items for this repo, one markdown file each: `VINE-NNN-slug.md`.
 Finished tickets are `git mv`'d to `_done/` — the folder move is the state change.
-This is the estate-wide ticket standard (canonical spec: `_system/TICKETS-SPEC.md`
+This is the estate-wide ticket standard (canonical spec: `_system/contracts/TICKETS.md`
 in the Apps estate); this file is a self-contained copy of the contract.
 
 ## Contract
