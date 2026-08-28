@@ -27,7 +27,7 @@ Tickets are **stubs** and never live alone:
   `- sources:` (cite the evidence).
 
 **The `## Prompt` is the pick-up contract.** It must stand alone pasted into a fresh
-Claude session at the repo root — the board's "Copy prompt" sends *only* that section.
+Claude session at the repo root — the board's "Copy prompt" sends _only_ that section.
 Write it cold, and have it tell the session to read the stub file for the rest.
 (Repos running the `/pipeline` spine may omit it — `/pipeline new` does the picking up.)
 
