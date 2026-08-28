@@ -1,6 +1,6 @@
 ---
 name: ticket-craft
-description: Cut, move and flag tickets the estate way — the .icm/intake/ contract. Use whenever creating a ticket, finishing one, planning work, or ending a session with work left over in any estate repo.
+description: Cut, move and plan work the estate way — epics, stubs and triage in .icm/intake/. Use whenever creating a ticket, finishing one, planning work, or ending a session with work left over in any estate repo.
 ---
 
 # Ticket craft — the estate contract, portable
@@ -8,31 +8,45 @@ description: Cut, move and flag tickets the estate way — the .icm/intake/ cont
 Canonical spec: `_system/contracts/TICKETS.md` in the icm-board repo; this repo's
 `.icm/intake/README.md` is its micro-copy. This skill is the working knowledge.
 
-## Cutting a ticket
+## The shape
 
-- One markdown file per unit of work: `.icm/intake/<PREFIX>-NNN-slug.md`. The prefix is
-  in `.icm/intake/README.md`; `NNN` = highest number across `intake/` **and** `_done/`,
-  plus 1 — numbers are never reused, even for dropped tickets.
-- Required: H1 `# <ID> · <title>` · a `Priority` row (`P0` urgent · `P1` next · `P2`
-  whenever) · a `## Prompt` section.
-- **The Prompt is the entire pick-up contract.** It must stand alone pasted into a fresh
-  Claude session at the repo root — the board's "Copy prompt" sends *only* that section.
-  Write it cold, and have it tell the session to read the ticket file for the rest.
-- Optional, free-form: `Type`, `Size`, `Status`, `Depends on`, `Sources`, `Client`,
-  acceptance checkboxes. The board displays what it finds.
+Tickets are **stubs** and never live alone:
 
-## Status and done
+- **Related work is an epic** — `.icm/intake/<epic-slug>/`: a `breakdown.md` (what was
+  understood + `## Build order`) and one stub per unit of work. Every stub carries
+  `- feature-slug:` (matching its filename), `- sequence: <n> of <m>` (contiguous
+  `1..m`), and `- depends-on:` (`none`, or in-epic slugs sequenced earlier). A
+  single-stub epic is fine.
+- **One-off findings are triage stubs** — `.icm/intake/triage/<slug>.md` with
+  `- lane: bug | tweak | chore` and `- found-by:`. Park it in a minute and move on —
+  never widen the current PR to absorb it.
+- **Identity is the path** (`<epic>/<slug>`) — no ticket numbers. H1 is
+  `# Stub: <title>`.
+- Optional dash-lines: `- priority: P0|P1|P2` (P0 urgent · P1 next · P2 whenever),
+  `- size:`, `- blocked: <reason>` (external blockage — remove the line when it lifts),
+  `- sources:` (cite the evidence).
 
-- Vocabulary: `ready` → `today` → `in-progress` → `blocked`. Missing row = `ready`.
-- `today` is the pick-up flag — **at most 3 across the whole estate**, flipped by `/day`.
-- **Done is a folder, not a field**: `git mv` the file to `.icm/intake/_done/` in the PR
-  that finishes the work. Abandoned work goes there too, with a
-  `> Dropped: <reason, date>` line prepended. Never delete; never reuse a number.
+**The `## Prompt` is the pick-up contract.** It must stand alone pasted into a fresh
+Claude session at the repo root — the board's "Copy prompt" sends *only* that section.
+Write it cold, and have it tell the session to read the stub file for the rest.
+(Repos running the `/pipeline` spine may omit it — `/pipeline new` does the picking up.)
+
+## Status is positional
+
+- **Open** = the stub sits in a live epic or triage. **Next** = lowest unmet sequence.
+- **Done is a folder move, never a field**: `git mv` the stub to its epic's (or
+  triage's) `_done/` in the PR that finishes the work. Abandoned work moves there too,
+  with a `> Dropped: <reason, date>` line prepended. Never delete; never reuse a slug
+  within an epic.
+- **A completed epic archives whole**: every stub in `_done/` →
+  `git mv intake/<epic>/ intake/_done/<epic>/`.
+- **Today** lives in one file — icm-board's `.icm/today.md`, written by `/day`, at most
+  10 entries estate-wide. Ticket files never carry a today flag.
 
 ## The standing rules
 
-- Any plan, backlog or task list becomes tickets here — **never a loose `TODO.md` or
+- Any plan, backlog or task list becomes stubs here — **never a loose `TODO.md` or
   `BACKLOG.md`**. Cutting what's left is part of ending any session.
-- The board reads `main` via the GitHub API — a ticket exists once pushed.
-- The session that picks a ticket up flips `Status` in its PR and moves the file to
-  `_done/` in the PR that finishes it.
+- The board reads `main` via the GitHub API — a stub exists once pushed.
+- Legacy flat `PREFIX-NNN` tickets (pre-2026-08-28) are left as they are — migrating a
+  repo is `/project`'s judgment work, not a side effect of another task.
