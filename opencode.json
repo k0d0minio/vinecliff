@@ -33,7 +33,14 @@
       "head *": "allow",
       "tail *": "allow",
 
-      "git push*": "ask"
+      // Push gate. Bash permissions are last-match-wins over the whole command, so
+      // the claude/* allow must stay BELOW the ask to win — swap the two lines and
+      // every push asks again. Pushing a claude/* branch runs unattended because the
+      // PR review on GitHub is the real gate; main and everything else still ask.
+      // Caveat: a bare `git push` (upstream already set) names no branch, so it
+      // matches only the ask — correct, and prompts always name the branch.
+      "git push*": "ask",
+      "git push* claude/*": "allow"
     }
   }
 }
