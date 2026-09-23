@@ -1,0 +1,108 @@
+# MANIFEST — file-level ownership for the pipeline (decision D20, .icm/project.md; agency layer D23).
+#
+# One line per file, relative to <repo>/.icm/. The first column is the owner:
+#   T  template-owned  — byte-identical in every pipeline repo. `icm-sync.sh --apply` overwrites
+#                        the repo's copy from this folder; `icm-check.sh` reports it as drift
+#                        until it does. Never carries a repo's identity — project specifics are
+#                        read at runtime from `.icm/project.json` and `_shared/project-rules.md`.
+#   P  project-owned   — seeded ONCE by `icm-check.sh --fix` when missing (the file here is the
+#                        stub), then the repo's forever: neither script ever touches it again.
+#
+# Both scripts read this file; nothing outside it can ever be synced. Add a file here to have it
+# seeded (and, for T, synced). The MANIFEST is itself template-owned and lands in every repo as
+# `.icm/MANIFEST`, beside `.icm/template-version` (written by `icm-sync.sh --apply` and
+# `setup.sh --fix`, never synced), so `setup.sh` can answer "complete? current?" offline, with no
+# icm-board in reach. A file the template retires leaves this list and is REPORTED by
+# `icm-sync.sh` for the operator to `git rm` — never deleted by a script (retired so far:
+# `scripts/notify.sh`, replaced by `scripts/report.sh`).
+#
+# `skills/<name>/` (three seeded capability skills — `skills/README.md`) and `_shared/run-pack/`
+# (the seven canonical run files `run-pack.sh` seeds into every run) are template-owned like the
+# contracts: no identity, read `project.json` at runtime. A `skills/*/scripts/*.sh` is executable
+# like `scripts/*.sh`; `scripts/lib/` stays sourced-only.
+#
+# A `T` file is changed in icm-board, never in a repo: a request to change one, made in a repo,
+# is a template change request — `_shared/template-change.md` (itself T) says how it is written,
+# parked and brought back. An in-repo edit is drift the next `--apply` overwrites.
+T MANIFEST
+T stages/01_scope/CONTEXT.md
+T stages/02_define/CONTEXT.md
+T stages/03_build/CONTEXT.md
+T stages/04_release/CONTEXT.md
+T lanes/bug/CONTEXT.md
+T lanes/tweak/CONTEXT.md
+T lanes/chore/CONTEXT.md
+T lanes/knowledge/CONTEXT.md
+T lanes/hotfix/CONTEXT.md
+T lanes/handover/CONTEXT.md
+T intake/CONTEXT.md
+T uat/CONTEXT.md
+T _shared/github.md
+T _shared/ci.md
+T _shared/stage-preamble.md
+T _shared/scope-template.md
+T _shared/conventions.md
+T _shared/template-change.md
+T _shared/run-pack/project.md
+T _shared/run-pack/plan.md
+T _shared/run-pack/tasks.md
+T _shared/run-pack/decisions.md
+T _shared/run-pack/status.md
+T _shared/run-pack/handoff.md
+T _shared/run-pack/FAILURE.md
+T scripts/lib/gh.sh
+T scripts/lib/changed-files.sh
+T scripts/lib/project.sh
+T scripts/lib/vercel.sh
+T scripts/lib/neon.sh
+T scripts/lib/model-prices.json
+T scripts/resolve-run.sh
+T scripts/validate-spec.sh
+T scripts/validate-intake.sh
+T scripts/validate-decisions.sh
+T scripts/new-run.sh
+T scripts/project-body.sh
+T scripts/project-labels.sh
+T scripts/ci-status.sh
+T scripts/close-out.sh
+T scripts/triage-report.sh
+T scripts/env-check.sh
+T scripts/select-model.sh
+T scripts/check-migrations.sh
+T scripts/process-raw.sh
+T scripts/deploy-status.sh
+T scripts/rollback.sh
+T scripts/health-check.sh
+T scripts/usage-snapshot.sh
+T scripts/env.sh
+T scripts/setup.sh
+T scripts/client-status.sh
+T scripts/promote-uat.sh
+T scripts/list-skills.sh
+T scripts/db-branch.sh
+T scripts/db-env.sh
+T scripts/security-check.sh
+T scripts/run-pack.sh
+T skills/README.md
+T skills/security-audit/SKILL.md
+T skills/security-audit/references/secret-patterns.md
+T skills/security-audit/scripts/audit.sh
+T skills/database-migration/SKILL.md
+T skills/database-migration/references/tools.md
+T skills/database-migration/scripts/preflight.sh
+T skills/preview-deploy/SKILL.md
+T skills/preview-deploy/references/checklist.md
+T skills/preview-deploy/scripts/status.sh
+T scripts/retrospective.sh
+T raw/README.md
+T raw/_processed/.gitkeep
+T processed/.gitkeep
+T output/.gitkeep
+P project.json
+P _shared/project-rules.md
+P _shared/knowledge-map.md
+P scripts/format.sh
+P scripts/lint.sh
+P scripts/validate-knowledge-map.sh
+P scripts/report.sh
+P runs/README.md

@@ -1,0 +1,85 @@
+{
+  "name": "vinecliff",
+  "complexity": "standard",
+  "docs_path": ".icm/docs",
+  "required_env": [],
+  "required_checks": [],
+  "personas": [
+    "guest",
+    "owner"
+  ],
+  "runs_archive": ".icm/runs/_done",
+  "intake_archive": ".icm/intake/_done",
+  "health_endpoint": "https://vinecliff.jamienisbet.com/",
+  "deploy": {
+    "platform": "vercel",
+    "team_slug": "kodominio",
+    "token_env": "VERCEL_TOKEN_KODOMINIO",
+    "projects": [
+      {
+        "name": "vinecliff",
+        "class": "product",
+        "status_context": "Vercel",
+        "production_url": "https://vinecliff.jamienisbet.com"
+      }
+    ]
+  },
+  "uat": {
+    "branch": "",
+    "url": ""
+  },
+  "reporting": {
+    "announce_from": "session",
+    "announce": [
+      "github-release"
+    ],
+    "alert": [],
+    "economics": [],
+    "channels": {
+      "github-release": {
+        "tag_prefix": "release/"
+      },
+      "slack": {
+        "token_env": "SLACK_BOT_TOKEN",
+        "announce_channel_env": "SLACK_ANNOUNCE_CHANNEL_ID",
+        "alert_channel_env": "SLACK_ALERTS_CHANNEL_ID"
+      },
+      "email": {
+        "api_key_env": "RESEND_API_KEY",
+        "from_env": "REPORT_EMAIL_FROM",
+        "to_env": "REPORT_EMAIL_TO"
+      }
+    }
+  },
+  "migrations": {
+    "path": "drizzle",
+    "reversible": false,
+    "stamp": "millis",
+    "tool": "drizzle",
+    "out_of_order": false
+  },
+  "database": {
+    "url_env": "DATABASE_URL",
+    "isolation": "neon",
+    "image": "postgres:16",
+    "name": "app",
+    "provider": "neon",
+    "neon": {
+      "project_id": "broad-lake-67509282",
+      "api_key_env": "NEON_API_KEY",
+      "production_branch": "main",
+      "previews": "none",
+      "uat_branch": ""
+    }
+  },
+  "security": {
+    "audit_command": ""
+  },
+  "support": {
+    "tier": "none",
+    "failsafe_page": "",
+    "monitoring": {
+      "sentry_dsn_env": "SENTRY_DSN"
+    }
+  }
+}

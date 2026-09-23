@@ -1,0 +1,65 @@
+# Label vocabulary for the delivery pipeline.
+#
+# Labels attach to a run's PR, projected ONE WAY from the run's spec.md by
+# .icm/scripts/project-labels.sh (see .icm/_shared/github.md → Labels). This repo carries no labels
+# workflow (only db-migrate.yml): new-run.sh projects the initial set when a PR opens and Release
+# projects its own `stage:release`; the define → build move is not automated here.
+#
+# This file is documentation plus one-time repo setup: create any missing label once, via
+# `gh label create` or the GitHub UI. Keep the list small and fixed — it powers at-a-glance
+# observability, not free-form tagging. Gates are NOT labels: they are checkboxes in the PR body.
+
+# --- Stage — exactly one, moving with the work along the spine -----------------------------------
+- name: "stage:define"
+  color: "c5def5"
+  description: "Define — spec being agreed (draft PR)"
+- name: "stage:build"
+  color: "1d76db"
+  description: "Build — implementation in progress on the run's branch"
+- name: "stage:release"
+  color: "5319e7"
+  description: "Release — reviews + docs + close-out → gated squash-merge into main"
+
+# --- Type — spine features and the lanes ---------------------------------------------------------
+- name: "type:feature"
+  color: "a2eeef"
+  description: "A spec'd feature run through the pipeline spine"
+- name: "type:bug"
+  color: "d73a4a"
+  description: "Lane — reproduce → fix → verify; the merge button is the gate"
+- name: "type:tweak"
+  color: "bfd4f2"
+  description: "Lane — tiny, fully-specified adjustment; the merge button is the gate"
+- name: "type:chore"
+  color: "cfd3d7"
+  description: "Lane — refactor / dep bump / migration, no user-facing behaviour change"
+- name: "type:hotfix"
+  color: "b60205"
+  description: "Lane — production is wrong now; PR into main, bypasses UAT, synced back after"
+- name: "type:handover"
+  color: "0e8a16"
+  description: "Lane — the handover pack at the end of an engagement"
+- name: "type:promote"
+  color: "5319e7"
+  description: "Lane — a signed-off UAT batch promoted to production; the operator merges"
+
+# --- Complexity — mirrors the spec header, and sets Release's code-review effort ------------------
+- name: "complexity:trivial"
+  color: "fef2c0"
+  description: "Trivial — small, low-risk change"
+- name: "complexity:standard"
+  color: "fbca04"
+  description: "Standard — typical feature scope"
+- name: "complexity:complex"
+  color: "d93f0b"
+  description: "Complex — large or high-risk change"
+
+# --- Persona — who the change is for (the `personas` array in .icm/project.json) ------------------
+#
+# The two roles in AGENTS.md: the guest who requests a booking, and the owner who runs /admin.
+- name: "persona:guest"
+  color: "ededed"
+  description: "The guest — browses the spaces, checks availability, requests to book"
+- name: "persona:owner"
+  color: "ededed"
+  description: "The owner — reviews and approves bookings, runs the estate from /admin"

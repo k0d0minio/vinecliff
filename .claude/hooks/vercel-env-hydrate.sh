@@ -99,6 +99,17 @@ done
 
 git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
+# The pipeline's own env.sh owns this flow where the repo carries it AND declares a deploy block
+# (agency brief §4.8): one implementation for the local and the cloud pull. A repo with env.sh but
+# no deploy block falls through to the remote-derived path below — env.sh would only say
+# "not declared".
+if [[ -x "$ROOT/.icm/scripts/env.sh" ]] && [[ -f "$ROOT/.icm/project.json" ]] \
+   && jq -e '(.deploy.projects // []) | length > 0' "$ROOT/.icm/project.json" >/dev/null 2>&1; then
+  out="$("$ROOT/.icm/scripts/env.sh" pull --target "$TARGET" 2>&1 | tail -n1)"
+  say "via .icm/scripts/env.sh pull ($TARGET): ${out:-no output}"
+  exit 0
+fi
+
 # The token never reaches argv or a temp file: curl reads its own config from stdin, and
 # printf is a builtin. Same idiom as _system/scripts/vercel-env.sh.
 api() {
