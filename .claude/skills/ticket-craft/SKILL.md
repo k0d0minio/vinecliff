@@ -26,10 +26,12 @@ Tickets are **stubs** and never live alone:
   `- size:`, `- blocked: <reason>` (external blockage — remove the line when it lifts),
   `- sources:` (cite the evidence).
 
-**The `## Prompt` is the pick-up contract.** It must stand alone pasted into a fresh
-Claude session at the repo root — the board's "Copy prompt" sends _only_ that section.
-Write it cold, and have it tell the session to read the stub file for the rest.
-(Repos running the `/pipeline` spine may omit it — `/pipeline new` does the picking up.)
+**The `## Prompt` is the brief Define reads, and it is always required.** It must stand
+alone pasted into a fresh agent session at the repo root. Write it cold, and have it tell
+the session to read the stub file for the rest. What the board's "Copy prompt" sends is
+the pick-up verb where the repo carries the `/pipeline` router (`/pipeline new
+<epic>/<slug>`, or the lane verb for a triage stub) and the `## Prompt` body where it does
+not — the prompt is the brief either way.
 
 ## Status is positional
 

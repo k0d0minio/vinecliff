@@ -1,52 +1,23 @@
-# Intake — Vinecliff tickets
+# Intake — the work, as epics and stubs
 
-Open work items for this repo, one markdown file each: `VINE-NNN-slug.md`.
-Finished tickets are `git mv`'d to `_done/` — the folder move is the state change.
-This is the estate-wide ticket standard (canonical spec: `_system/contracts/TICKETS.md`
-in the Apps estate); this file is a self-contained copy of the contract.
+> This folder follows the estate-wide intake standard (canonical spec:
+> `_system/contracts/TICKETS.md` in the icm-board estate). Tickets are **stubs** that
+> never live alone: related work is an **epic** — `intake/<epic-slug>/` with a
+> `breakdown.md` (what was understood + the build order) and one stub per unit of work,
+> each `- sequence: <n> of <m>` with `- depends-on:` naming any in-epic prerequisite —
+> and one-off findings are **triage** stubs in `intake/triage/` tagged
+> `- lane: bug | tweak | chore`. Identity is the path (`<epic>/<slug>`, feature-slug
+> matching the filename); there are no ticket numbers.
+>
+> **Status is positional.** Open = the stub is here; done = `git mv` into the epic's
+> `_done/` (dropped work too, with a `> Dropped: <reason, date>` line — nothing is
+> deleted). A completed epic moves whole into `intake/_done/`. Priority is an optional
+> `- priority: P0|P1|P2` line; external blockage an optional `- blocked: <reason>` line.
+> Each stub's `## Prompt` must stand alone pasted into a fresh agent session at the
+> repo root — it is the brief Define reads. The admin dashboard's Tickets board reads
+> this folder from `main` and sends the pick-up verb (`/pipeline new <epic>/<slug>`, or
+> the lane verb for a triage stub) where this repo carries the `/pipeline` router, the
+> `## Prompt` body where it does not.
 
-## Contract
-
-Required in every ticket:
-
-- H1: `# VINE-NNN · <title>` — `NNN` zero-padded, never reused.
-- A metadata table with a `Priority` row: `P0` (urgent) · `P1` (next) · `P2` (whenever).
-- A `## Prompt` section that stands alone when pasted into a fresh Claude session at
-  the repo root. It should tell the session to read the ticket file for full context.
-
-Status (a `Status` row in the table):
-
-- `ready` → `today` → `in-progress` → `blocked`. Missing row = `ready`.
-- `today` marks tickets picked for the day's worklist.
-- Done is not a status — move the file to `_done/`.
-- The session doing the work flips `Status` in its PR and moves the ticket to
-  `_done/` in the PR that finishes it.
-
-Optional, free-form: `Type`, `Size`, `Depends on`, `Client`, acceptance criteria,
-anything else useful.
-
-## Template
-
-```markdown
-# VINE-001 · <title>
-
-| | |
-|---|---|
-| Status | ready |
-| Type | task |
-| Priority | P1 |
-| Size | S |
-
-## Problem
-<what and why>
-
-## Acceptance
-- [ ] <observable outcome>
-- [ ] CI green
-
-## Prompt
-
-<self-contained instruction for a fresh Claude session; reference this
-ticket file by path. PRs on a claude/ branch; no local checks — CI is
-the source of truth.>
-```
+Any plan, backlog, or task list for this repo becomes stubs here — never a loose
+`TODO.md` or `BACKLOG.md` at the root.

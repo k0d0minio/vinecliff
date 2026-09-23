@@ -43,6 +43,7 @@ creates the owner's account, so it exists as soon as migrations have run.
 | Migrations and demo data | [`scripts/migrate.ts`](scripts/migrate.ts) · [`scripts/seed-demo.ts`](scripts/seed-demo.ts) |
 | CI / migration workflow | [`.github/workflows/db-migrate.yml`](.github/workflows/db-migrate.yml) |
 | Plan or track work on this repo | [`.icm/intake/`](.icm/intake/) — epics and stubs, contract in its README |
+| Build a feature, fix a bug, ship a tweak or chore | **`/pipeline`** — the stage and lane contracts under [`.icm/`](.icm/CONTEXT.md); repo facts in [`.icm/project.json`](.icm/project.json) and [`.icm/_shared/project-rules.md`](.icm/_shared/project-rules.md) |
 
 ## Standing rules
 

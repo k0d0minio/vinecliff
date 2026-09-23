@@ -16,6 +16,17 @@ set -uo pipefail
 hydrate="${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/vercel-env-hydrate.sh"
 if [[ -x "$hydrate" ]]; then "$hydrate" || true; fi
 
+# The capability-skills registry (Level 1 only — one line per skill, its triggers on it), so a
+# stage sees what it may load without loading any of it. Quiet when the repo has none.
+skills="${CLAUDE_PROJECT_DIR:-.}/.icm/scripts/list-skills.sh"
+if [[ -x "$skills" ]] && [[ -d "${CLAUDE_PROJECT_DIR:-.}/.icm/skills" ]]; then
+  reg="$("$skills" --bare 2>/dev/null || true)"
+  if [[ -n "$reg" ]]; then
+    echo "Capability skills (.icm/skills/ — load a SKILL.md only when one of its triggers matches the work):"
+    printf '%s\n' "$reg"
+  fi
+fi
+
 intake="${CLAUDE_PROJECT_DIR:-.}/.icm/intake"
 [[ -d "$intake" ]] || exit 0
 

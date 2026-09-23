@@ -79,7 +79,7 @@ subscribed session wakes for each one.
   `--json` fields you need, keep `--limit` tight, never page through diffs or comment
   threads the task doesn't need.
 
-Repos on the pipeline profile carry this in `.icm/_shared/github.md` and `.icm/_shared/ci.md`,
+Pipeline repos carry this in `.icm/_shared/github.md` and `.icm/_shared/ci.md`,
 gated by `.icm/scripts/ci-status.sh` — read it there rather than here. Each rule lives once.
 
 ## Finishing
