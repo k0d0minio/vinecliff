@@ -49,11 +49,21 @@ batch. `lib/project.sh → neon_uat_branch` names it; `db-env.sh status` reads i
 - **Nothing here deletes the UAT branch.** `lib/neon.sh` refuses its name on every delete; the
   cleanup workflow skips the UAT git branch by name; `db-env.sh prune` never lists it.
 
+On a **MongoDB** repo (`database.provider: mongodb`, `database.mongodb.previews: branch` —
+decision D35) the same shape holds without a copy of production: the UAT git branch deploys as a
+preview, so its database is `preview_<uat.branch>` (`lib/db-name.mjs`; `lib/project.sh →
+mongo_uat_database`), migrated and seeded by the repo's preview-migrate workflow on every push to
+the branch. `db-env.sh reset-uat --apply` drops it and re-makes it with the repo's migrate and
+seed commands — the client's test data goes, the shape is the UAT branch's; nothing is copied
+from production. `lib/mongo.mjs` refuses its name on every other drop, the reference
+`mongodb-cleanup.yaml` skips the UAT git branch, and `db-env.sh prune` never lists it.
+
 ## The path of a run (what changes, stage by stage)
 
 | Where | Without UAT | With UAT |
 |---|---|---|
-| Define — the run branch | cut from `origin/main` | cut from `origin/<uat>`, with `origin/main` brought in first (the intake cut lives on `main`); `new-run.sh` brings `main` in itself when it finds it missing, and warns when the branch was not cut from the UAT branch |
+| Tickets — cuts, moves, Scope's front (D38) | a ticket PR into `main`, merged at once by the session that opened it | a ticket PR into `<uat>`, merged at once — the UAT branch is the **ticket base branch**; the board reads it, and `main`'s copy lags until a promotion |
+| Define — the run branch | cut from `origin/main` | cut from `origin/<uat>` (the stub is already there), with `origin/main` brought in first so an unsynced hotfix is not lost; `new-run.sh` brings `main` in itself when it finds it missing, and warns when the branch was not cut from the UAT branch |
 | Define — the PR | `base: main` | `base: <uat>` (`new-run.sh` reads `lib/project.sh → pipeline_base_branch`) |
 | Build step 10 · Release step 7(a) | merge `origin/main` | merge `origin/main`, then `origin/<uat>` |
 | Release step 7(c) — `close-out.sh` | archives the run | archives the run **and appends its slug to `.icm/uat/batch.json`** in the same commit — the squash publishes both onto the UAT branch |
@@ -61,8 +71,8 @@ batch. `lib/project.sh → neon_uat_branch` names it; `db-env.sh status` reads i
 | Release step 9(a) | `deploy-status.sh --sha <merge-sha>` — production, once | `deploy-status.sh --sha <merge-sha> --uat` — the UAT branch's deployment, once; production untouched |
 | Release step 9(b) | `report.sh announce` | **no announcement** — record `announce: deferred to promotion`; the client is told once, when the batch ships |
 | Lanes (bug · tweak · chore · handover) | PR into `main`, the operator merges | PR into `<uat>`, the operator merges; the fix is on UAT, announced at promotion |
-| Hotfix | PR into `main` | **still `main`** — production is wrong now; `promote-uat.sh sync` afterwards brings the fix into UAT |
-| Knowledge lane | docs-only PR into `main` | unchanged — documentation is not client-tested |
+| Hotfix | PR into `main` | **still `main`** — production is wrong now; `promote-uat.sh sync` is **required** afterwards: it brings the fix, and the run's close-out, into UAT and the ticket base branch |
+| Knowledge lane | docs-only PR into `main` | still `main` — documentation is not client-tested; `promote-uat.sh sync` is **required** afterwards, so the UAT branch every run and the board read carries the page |
 
 Nothing about the gates changes: **Spec approved** and **Ready to merge** are the operator's
 ticks, the merge into the UAT branch rests on a settled `GREEN` exactly as a merge into `main`
@@ -135,7 +145,10 @@ either way. The agent never calls `merge_pull_request` on a promotion PR.
 .icm/scripts/promote-uat.sh sync
 ```
 
-Run **after the promotion PR merged**, and after any hotfix that went to `main` directly. In a
+Run **after the promotion PR merged**, and — **required, not optional** — after every hotfix and
+every knowledge-lane PR that merged into `main`: until it runs, what those merges moved (a hotfix's
+close-out, a page) is missing from the UAT branch, which is the ticket base branch the board reads
+(D38), so the board shows their work as not done. In a
 throwaway worktree it merges `origin/main` into the UAT branch — one merge commit — and, when
 that merge carries an approved batch that reached production, resets `batch.json` for the next
 batch in the same commit (the promotion logged under `promotions`; stubs merged after the
@@ -150,8 +163,12 @@ read of production, the operator's to make.
 ## What bypasses UAT, and what never happens
 
 - **A hotfix bypasses UAT** (`lanes/hotfix/CONTEXT.md`): production is wrong now, its PR targets
-  `main`, and `sync` carries the fix into UAT afterwards.
-- **The knowledge lane bypasses UAT**: a docs-only PR into `main`.
+  `main`, and `sync` carries the fix into UAT afterwards — required, not optional.
+- **The knowledge lane bypasses UAT**: a docs-only PR into `main`, and `sync` afterwards — required
+  as for a hotfix.
+- **Ticket state never goes to `main` directly.** A ticket PR targets the UAT branch
+  (`.claude/skills/pr-conventions/SKILL.md` → The ticket PR); `main` receives it only inside a
+  promotion.
 - **Nothing promotes on its own.** No workflow, schedule or script opens a promotion without
   `approve`, and `approve` runs on a human's word. No gate is ticked by an agent. No verb merges.
 - **Nothing is generated per batch** — no branch per batch, no environment per batch, no URL

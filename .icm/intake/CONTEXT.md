@@ -7,10 +7,21 @@ lane. This file owns the **formats** (breakdown and stub), the **triage** shape,
 the Scope stage's job and lives in `.icm/stages/01_scope/CONTEXT.md` (step 6). There is no
 `/pipeline decompose` subcommand; the cut is the last thing Scope does.
 
-The stub folder is the only state (no branch or PR of its own); Scope pushes it to `main` with
-`scope.md`. Re-cutting after the human edits `breakdown.md` regenerates the stubs. **Every scope
+The stub folder is the only state (no branch or run PR of its own); Scope lands it with
+`scope.md` through one ticket PR into the repo's **ticket base branch**. Re-cutting after the human edits `breakdown.md` regenerates the stubs. **Every scope
 gets an intake folder, however small** — a single-PR scope gets exactly one stub whose
 `feature-slug` is the scope slug itself.
+
+**Where ticket state lives (D38).** This folder has one home: the **ticket base branch** —
+`lib/project.sh → pipeline_base_branch`, the UAT branch where `.icm/project.json` declares one,
+else `main`. The board and every script that reads the queue read it there; on a UAT repo `main`
+carries a lagging copy that only promotions update, and nothing reads it for tickets. Every write
+reaches it through a PR: inside a run, the run's own PR (the stub it consumes, the triage stubs it
+parks, the close-out's archive move); outside a run — a cut, a drop, a `_done/` move, a parked
+finding, a `triage batch` or `prune` — a **ticket PR** the session merges at once
+(`.claude/skills/pr-conventions/SKILL.md` → The ticket PR). Never a direct push. The hotfix lane
+and the knowledge lane merge into `main`, so on a UAT repo what they move reaches this home only
+through `promote-uat.sh sync` (`.icm/uat/CONTEXT.md`).
 
 One audit may write here too, where the repo ships one (`_shared/project-rules.md` → Capability
 skills): a codebase-audit skill fired daily by a Claude Routine parks **at most one** finding a day
@@ -32,7 +43,7 @@ writes **one stub per merge SHA** — `triage/health-check-<date>-<short-sha>.md
 below, `lane: bug`, `found-by: health-check · <date>`, `complexity: high` — carrying the endpoint,
 the code each attempt saw, the merge SHA and the recoveries `rollback.sh` prepares. It writes
 the file and commits nothing: the stage names it in its stop message and the operator decides —
-commit it for the bug lane, or open `/pipeline hotfix` by hand. Nothing parks a stub for the
+land it for the bug lane (a ticket PR), or open `/pipeline hotfix` by hand. Nothing parks a stub for the
 hotfix lane.
 
 A **template change request** is parked here too (`_shared/template-change.md`): when a request
@@ -229,7 +240,7 @@ PR; `batch` writes an intake epic, the others only read.
   stub, the same `file:line` cited elsewhere, or a body naming a run or PR that has since
   merged. One line per candidate — name, age, the reason — and the exact `git rm` for each.
   **It never deletes.** The human confirms name by name; the agent then runs only the deletions
-  confirmed, in one commit, and nothing else. A candidate that is a duplicate rather than dead
+  confirmed, in one commit on one ticket PR, and nothing else. A candidate that is a duplicate rather than dead
   is better retired with a `superseded-by:` line into `_done/` (as `batch` does) than removed.
 
 ## After the batch

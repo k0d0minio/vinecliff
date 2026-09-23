@@ -3,7 +3,7 @@ name: database-migration
 description: Write, name, isolate and order a schema migration so parallel runs merge in any order and never touch a shared database.
 triggers:
   - migration, migrations/, schema, prisma, drizzle, flyway, mongodb, mongoose
-  - check-migrations.sh, db-branch.sh
+  - check-migrations.sh, db-branch.sh, db-branch.sh prove
   - touches a data model
   - migrations.reversible, stop class 3
 ---
@@ -23,9 +23,12 @@ gives the run a database of its own. Both headers are the specification.
    `database.neon.api_key_env` names in the shell, nothing else. `SKIP` means this repo declares
    no isolation (`.icm/project.json` → `database.isolation`), or the engine it names is out of
    reach: then **run no migration locally** — the preview database and CI apply it, and the
-   spec's data-model change is verified there. Never point a session at production. A MongoDB
-   repo is always this case today — the three engines are Postgres-shaped, so it stays
-   `isolation: none` and the preview database is the one the branch's migrations reach.
+   spec's data-model change is verified there. Never point a session at production. On a
+   MongoDB repo (`database.provider: mongodb`, `isolation: database`) the run's database is
+   `run_<slug>` on the repo's own cluster, beside production and the shared preview database:
+   `up` runs the repo's migrate command, then its seed command (migrate first: the seed's
+   models build the head's indexes), with the name variable (`database.mongodb.name_env`) set to it — and `env` prints just that one export. Nothing is
+   cloned from production; the seed is the repo's, unchanged (D35).
 2. **Name the file with the script, never by hand**:
    `check-migrations.sh --new "<what it does>" --apply` → `CREATED <path>`. The name carries a UTC
    millisecond stamp in the repo's declared form (`migrations.stamp`, default `millis`:
@@ -60,7 +63,16 @@ gives the run a database of its own. Both headers are the specification.
    accepts a migration stamped before one it already applied. The script prints the tool's own
    setting (`references/tools.md`); the tool's config file is the repo's to change, in this
    branch, when it does not already say so.
-5. Release stop class 3 asks `env.sh audit --changed` and reads `migrations.reversible`: a
+5. **On a MongoDB repo, prove the round trip** (after step 3's `OK`, Build step 10 and Release
+   step 7): `db-branch.sh <slug> prove` → `PROVEN`. On a fresh, unseeded `run_<slug>` migrated
+   through exactly `main`'s migrations (the runner follows the stamp, so where this branch's are
+   stamped before some of `main`'s, those go up — and this branch's come down — one at a time,
+   `--single`) it runs this branch's own migrations up → down → up and compares the collection list and every
+   index spec: `down` must restore them where `migrations.reversible` is true (and every file
+   must export a `down`); the second `up` must reproduce the first; and, the runner's records of
+   them forgotten the way a re-stamp forgets them, one more `up` must change nothing.
+   `UNPROVEN n` names what failed — fix it on this branch. The seed runs only after `PROVEN`.
+6. Release stop class 3 asks `env.sh audit --changed` and reads `migrations.reversible`: a
    forward-only migration in a merge with no rollback path is recorded in the `## Release`
    record's `- migrations:` line, not hidden.
 
@@ -73,16 +85,24 @@ the branch's migrations **at build**, because the repo's build command runs the 
 not). A preview whose build does not migrate shows production's shape without this run's change;
 say so in the stop message rather than assuming the preview proved the migration.
 
+On a MongoDB repo with `database.mongodb.previews: branch`, every preview reads its own
+`preview_<branch>` — the app derives the name at runtime through `.icm/scripts/lib/db-name.mjs`
+once `MONGODB_PREVIEW_PER_BRANCH=1` is set on the Preview target — and the repo's preview-migrate
+workflow migrates and seeds it on each PR push; the smoke check waits for that job. With the flag
+unset, every preview shares `preview_name`, exactly as before.
+
 ## After the merge
 
-- `db-branch.sh <slug> down` releases the run's schema, container or Neon branch; `close-out.sh`
-  archives the run and its `- db:` pointer with it. A `run/<slug>` branch a session forgot
-  expires on its own after 7 days, and the reference `neon-cleanup.yaml` deletes it when the PR
-  closes.
+- `db-branch.sh <slug> down` releases the run's schema, container, Neon branch or MongoDB
+  database; `close-out.sh` archives the run and its `- db:` pointer with it. A `run/<slug>`
+  branch a session forgot expires on its own after 7 days, and the reference `neon-cleanup.yaml`
+  deletes it when the PR closes; a forgotten `run_<slug>` database is dropped by
+  `mongodb-cleanup.yaml` on close, or by `db-env.sh prune --apply` once the run is archived.
 
 ## References
 
-- `references/tools.md` — how flyway, prisma, drizzle and a plain SQL runner each order
-  migrations, and where the out-of-order setting lives for each.
+- `references/tools.md` — how flyway, prisma, drizzle, a plain SQL runner and a MongoDB runner
+  each order migrations, where the out-of-order setting lives for each, and the MongoDB
+  round-trip rule.
 - `bash .icm/skills/database-migration/scripts/preflight.sh <slug>` — bind + check in one call
   (Level 3).

@@ -35,8 +35,9 @@
 # declares a persistent client UAT environment (`.icm/project.json` → uat.branch; lib/project.sh
 # → pipeline_base_branch; .icm/uat/CONTEXT.md). A hotfix targets `main` regardless — production
 # is wrong now. `--base` overrides either. When the base is the UAT branch this script also brings
-# origin/main into the run branch before anything is committed (the intake cut and any hotfix
-# land on main first), and warns when the branch was not cut from the UAT branch.
+# origin/main into the run branch before anything is committed (a hotfix or a knowledge-lane
+# change lands on main first; the intake cut does not — it lands on the ticket base branch, the
+# UAT branch, through a ticket PR: D38), and warns when the branch was not cut from the UAT branch.
 #
 # --dry-run prints the PR body this call would open (the spine body straight from
 # project-body.sh, or the lane body) and creates NOTHING: no branch, no commit, no push, no PR,
@@ -177,10 +178,11 @@ else
 fi
 
 # --- UAT repos: the run branch carries main (.icm/uat/CONTEXT.md) ----------------------------------------
-# Where the PR targets the UAT branch, the intake cut (Scope pushes to main) and any hotfix (its
-# lane merges into main) are on main and not yet on the UAT branch. Bring origin/main into this
-# run branch before anything is committed, so the stub the run consumes is here and the run's PR
-# carries main's newer commits into UAT. A conflict is the operator's — aborted and named, never
+# Where the PR targets the UAT branch, a hotfix and a knowledge-lane change (both merge into main)
+# are on main and not yet on the UAT branch until promote-uat.sh sync runs. Bring origin/main into
+# this run branch before anything is committed, so the run's PR carries main's newer commits into
+# UAT. The stub the run consumes is already on the UAT branch — the ticket base branch, where
+# Scope's ticket PR landed it (D38) — so it arrives with the cut from origin/<uat>, not from main. A conflict is the operator's — aborted and named, never
 # resolved by guesswork. Skipped on a dry run and when the base is main (nothing to bring in).
 if [ "$dry_run" -eq 0 ] && uat_declared && [ "$base" = "$(uat_branch)" ]; then
   if GIT_TERMINAL_PROMPT=0 git_c fetch origin --quiet >/dev/null 2>&1; then
@@ -189,7 +191,7 @@ if [ "$dry_run" -eq 0 ] && uat_declared && [ "$base" = "$(uat_branch)" ]; then
     fi
     if git_c rev-parse --verify -q origin/main >/dev/null 2>&1 && ! git_c merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
       if git_c merge --no-edit origin/main >/dev/null 2>&1; then
-        echo "brought origin/main into $branch — the UAT branch was behind main (an intake cut or a hotfix travels with this run)" >&2
+        echo "brought origin/main into $branch — the UAT branch was behind main (a hotfix or a knowledge-lane change travels with this run; promote-uat.sh sync is still owed)" >&2
       elif [ "$(git_c diff --name-only --diff-filter=U 2>/dev/null)" = ".icm/uat/batch.json" ] \
            && git_c checkout --ours -- .icm/uat/batch.json >/dev/null 2>&1 && git_c add .icm/uat/batch.json && git_c commit -q --no-edit >/dev/null 2>&1; then
         # The one file main and the UAT branch both write: main's copy is a promotion's snapshot,

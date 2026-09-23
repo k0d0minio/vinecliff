@@ -15,6 +15,13 @@
 # id (the newest READY one created before this — what `rollback.sh --vercel` names). Quiet
 # projects (`class: quiet`) build on the default branch too, so they are read like product ones.
 #
+# Vercel's `sha=` filter matches the full 40-character SHA only, so a short --sha is expanded
+# through the repo's git first; where that fails, or the filter finds nothing, the project's
+# newest deployments are read and `meta.githubCommitSha` matched by prefix. A deployment the
+# project's Ignored Build Step canceled (a merge that touches none of the project's inputs) is
+# SKIPPED, not an incident: production still serves the previous READY deployment, named on the
+# line. CANCELED stays with ERROR only when it was not the ignore step — a person, or a newer push.
+#
 # Read-only in the strong sense: GET only, the CLI never run, nothing written but stdout.
 #
 # --uat — where the repo declares a UAT environment (.icm/project.json → uat; .icm/uat/CONTEXT.md)
@@ -32,10 +39,13 @@
 #    or its head SHA when it has not merged yet; --sha bypasses GitHub entirely.)
 #
 # Verdict (stdout, last line):
-#   RESULT: READY                 exit 0  — every declared project's deployment of this SHA is READY
+#   RESULT: READY                 exit 0  — every declared project's deployment of this SHA is READY,
+#                                           or SKIPPED by its ignore step (at least one READY)
 #   RESULT: ERROR <project…>      exit 3  — at least one is ERROR or CANCELED (named). See the hotfix lane.
 #   RESULT: PENDING               exit 4  — the wait ran out with a deployment unsettled or not yet created
-#   RESULT: SKIP                  exit 0  — no deploy block: `production: not declared (no deploy block)`
+#   RESULT: SKIP                  exit 0  — every project SKIPPED by its ignore step (production unchanged:
+#                                           `- production: SKIPPED on <sha> — …`), or no deploy block
+#                                           (`production: not declared (no deploy block)`)
 set -euo pipefail
 
 command -v curl >/dev/null || { echo "curl not found" >&2; exit 1; }
@@ -95,11 +105,34 @@ if [ -z "$sha" ]; then
   echo "PR #$pr → $(printf '%s' "$resp" | sed '$d' | jq -r 'if .merged then "merged as" else "not merged — head" end') ${sha:0:7}" >&2
 fi
 
+# Vercel's sha filter wants the full SHA; expand a short one where the repo's git knows it.
+if [ "${#sha}" -lt 40 ]; then
+  full="$(git -C "$repo_root" rev-parse --verify --quiet "${sha}^{commit}" 2>/dev/null || true)"
+  [ -z "$full" ] || sha="$full"
+fi
+
+# The deployment of $sha for <name>, newest first — `--uat` prefers the UAT branch's own. The sha
+# filter first (full SHA only); else the newest deployments, matched on meta.githubCommitSha.
+pick='sort_by(-.created) | first // empty'
+[ "$uat" -eq 0 ] || pick='([.[] | select((.meta.githubCommitRef // "") == $b)] | sort_by(-.created) | first) // (sort_by(-.created) | first) // empty'
+find_deployment() { # <name>
+  local name="$1" deps="" tgt=()
+  [ "$uat" -eq 1 ] || tgt=(--target production)
+  if [ "${#sha}" -eq 40 ]; then
+    deps="$(vercel_deployments "$name" ${tgt[@]+"${tgt[@]}"} --sha "$sha" --limit 10)"
+  fi
+  if [ -z "$deps" ] || [ "$deps" = "[]" ]; then
+    deps="$(vercel_deployments "$name" ${tgt[@]+"${tgt[@]}"} --limit 20 \
+      | jq -c --arg s "$sha" '[.[] | select((.meta.githubCommitSha // "") | startswith($s))]')"
+  fi
+  printf '%s' "$deps" | jq -c --arg b "$ub" "$pick"
+}
+
 # --- one read per project, bounded -----------------------------------------------------------------------
 
 deadline=$(( SECONDS + timeout ))
 mapfile -t projects < <(deploy_projects)
-verdict="READY"; errored=""; lines=()
+verdict="READY"; errored=""; lines=(); ready=0; ignored=0
 
 for pj in "${projects[@]}"; do
   name="$(printf '%s' "$pj" | jq -r '.name')"
@@ -110,21 +143,19 @@ for pj in "${projects[@]}"; do
   fi
   state=""; dpl_id=""; dpl_url=""; created=""
   while :; do
-    if [ "$uat" -eq 1 ]; then
-      # Any target: the UAT branch deploys as a preview deployment (or a custom environment). The
-      # branch's own deployment of this SHA first; the newest of the SHA otherwise.
-      deps="$(vercel_deployments "$name" --sha "$sha" --limit 10)"
-      dpl="$(printf '%s' "$deps" | jq -c --arg b "$ub" '([.[] | select((.meta.githubCommitRef // "") == $b)] | sort_by(-.created) | first) // (sort_by(-.created) | first) // empty')"
-    else
-      deps="$(vercel_deployments "$name" --target production --sha "$sha" --limit 5)"
-      dpl="$(printf '%s' "$deps" | jq -c 'sort_by(-.created) | first // empty')"
-    fi
+    # Any target under --uat: the UAT branch deploys as a preview deployment (or a custom
+    # environment) — the branch's own deployment of this SHA first, the newest of the SHA otherwise.
+    dpl="$(find_deployment "$name")"
     if [ -n "$dpl" ]; then
       state="$(printf '%s' "$dpl" | jq -r '.state // .readyState // "UNKNOWN"')"
       dpl_id="$(printf '%s' "$dpl" | jq -r '.uid // .id')"
       dpl_url="$(printf '%s' "$dpl" | jq -r '.url // empty')"
       created="$(printf '%s' "$dpl" | jq -r '.created // 0')"
-      case "$state" in READY|ERROR|CANCELED) break ;; esac
+      # The ignore step's cancel carries Vercel's own words on the list item; nothing else does.
+      if [ "$state" = "CANCELED" ] && printf '%s' "$dpl" | jq -e '(.errorMessage // "") | test("Ignored Build Step"; "i")' >/dev/null; then
+        state="SKIPPED"
+      fi
+      case "$state" in READY|ERROR|CANCELED|SKIPPED) break ;; esac
     fi
     if [ "$wait" -eq 0 ] || [ "$SECONDS" -ge "$deadline" ]; then break; fi
     echo "$name: ${state:-no deployment of ${sha:0:7} yet} — waiting ${interval}s" >&2
@@ -141,14 +172,20 @@ for pj in "${projects[@]}"; do
   fi
 
   case "$state" in
-    READY)          lines+=("$name ($class): READY — https://${dpl_url} — ${dpl_id}${prev_id:+ (prev ${prev_id})}") ;;
+    READY)          lines+=("$name ($class): READY — https://${dpl_url} — ${dpl_id}${prev_id:+ (prev ${prev_id})}"); ready=1 ;;
+    SKIPPED)        if [ "$uat" -eq 1 ]; then lines+=("$name ($class): SKIPPED — ignore step, the UAT address keeps its last READY — canceled ${dpl_id}")
+                    else lines+=("$name ($class): SKIPPED — ignore step, live ${prev_id:-its last READY} — canceled ${dpl_id}"); fi
+                    ignored=1 ;;
     ERROR|CANCELED) if [ "$uat" -eq 1 ]; then lines+=("$name ($class): $state — ${dpl_id} — the UAT address keeps its last READY deployment; fix it through a bug lane into the UAT branch")
                     else lines+=("$name ($class): $state — ${dpl_id}${prev_id:+ (prev ${prev_id})} — see the hotfix lane (rollback.sh --sha $sha --vercel names the recovery)"); fi
                     errored="${errored:+$errored }$name"; verdict="ERROR" ;;
-    "")             lines+=("$name ($class): no $label deployment of ${sha:0:7} yet (not created, or filtered by an ignore step)"); [ "$verdict" = "ERROR" ] || verdict="PENDING" ;;
+    "")             lines+=("$name ($class): PENDING — not created — no $label deployment of ${sha:0:7} yet"); [ "$verdict" = "ERROR" ] || verdict="PENDING" ;;
     *)              lines+=("$name ($class): $state — ${dpl_id} (unsettled)"); [ "$verdict" = "ERROR" ] || verdict="PENDING" ;;
   esac
 done
+
+# Every project skipped by its ignore step: nothing deployed, production unchanged.
+[ "$verdict" != "READY" ] || [ "$ready" -eq 1 ] || [ "$ignored" -eq 0 ] || verdict="SKIPPED"
 
 printf '%s\n' "${lines[@]}"
 # The one line Release copies into its record.
@@ -157,6 +194,7 @@ echo "- $label: $verdict on ${sha:0:7} — $record$uat_suffix"
 
 case "$verdict" in
   READY)   echo "RESULT: READY"; exit 0 ;;
+  SKIPPED) echo "RESULT: SKIP"; exit 0 ;;
   ERROR)   echo "RESULT: ERROR $errored"; exit 3 ;;
   *)       echo "RESULT: PENDING"; exit 4 ;;
 esac

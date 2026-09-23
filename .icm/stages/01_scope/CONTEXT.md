@@ -7,7 +7,8 @@ session, write it down plainly as `scope.md`, and cut it into an intake batch th
 walks into Define. No spec, no code, no feature branch, no feature PR.
 
 This is the whole front: the settle and the cut happen here, in one sitting, and the stage ends
-with the artifacts on `main` for the human to review. **No revision path either** — a scope that came out wrong is deleted and Scope is run
+with the artifacts merged into the ticket base branch (`lib/project.sh → pipeline_base_branch`:
+the UAT branch where the repo declares one, else `main`) for the human to review. **No revision path either** — a scope that came out wrong is deleted and Scope is run
 again from the source.
 
 ## Inputs (read only these)
@@ -64,7 +65,7 @@ glossary to follow, rewrite it.
    (`.icm/raw/README.md`) — is recorded from that extracted text, with the processed file and the
    archived original both named in the provenance header. Recording it **retires the pointer
    stub** the script parked: `git mv .icm/intake/triage/<id>.md .icm/intake/triage/_done/` with a
-   `- superseded-by: runs/<slug>/01_scope/` line added under its `found-by:`, in the same push.
+   `- superseded-by: runs/<slug>/01_scope/` line added under its `found-by:`, in the same ticket PR.
    An extraction is a machine's reading — where the original is a recording or a scan, say so in
    the header, and check anything a decision rests on against the original.
 
@@ -146,23 +147,30 @@ order` agreeing with the stubs). What it cannot judge, you still must: each stub
 
 7. **Write `.icm/runs/<slug>/run.md`** (Outputs below), seed the run's canonical file pack —
    `.icm/scripts/run-pack.sh <slug> --init` (`status.md` reads `phase: scope`; write `handoff.md`
-   as "review scope.md and the batch on main, then `new`") — and **commit straight to `main` and
-   push** — `story.md`, `scope.md`, `run.md`, the pack, and `.icm/intake/<slug>/**`, nothing else. Commit message:
-   `docs: <slug> — story committed, intake cut`. **The path guard:** touch nothing outside
-   `.icm/runs/<slug>/**` and `.icm/intake/<slug>/**`. There is no PR and no docs-only-PR
-   fallback: `main`'s ruleset lets only its bypass list push directly, and the identities that can
-   are recorded in `_shared/github.md` → PR regimes. **If the push is refused, STOP** and report it
-   as a ruleset problem to fix — do not open a PR, do not retry under another identity, do not
-   leave the artifacts local-only and carry on.
+   as "review scope.md and the batch on the base branch, then `new`") — and **land it through a
+   ticket PR** (D38): cut `claude/tickets-<slug>-<YYYYMMDD>` from `origin/<base>` (`<base>` =
+   `pipeline_base_branch`), commit `story.md`, `scope.md`, `run.md`, the pack, and
+   `.icm/intake/<slug>/**`, nothing else — commit message `docs: <slug> — story committed,
+   intake cut` — push, open the PR into `<base>` titled `Scope: <slug> — intake cut`, and merge
+   it at once. The PR's label and body, and the merge rule — **verify the path guard first**,
+   then squash-merge without waiting for any check, `--admin` where a ruleset requires checks —
+   are `.claude/skills/pr-conventions/SKILL.md` → The ticket PR. **The path guard:** touch
+   nothing outside `.icm/runs/<slug>/**` and `.icm/intake/<slug>/**` — plus the `triage/` pointer
+   stub step 2 retires, where the source came through `.icm/raw/`; a diff that strays → STOP and
+   do not merge. **If the merge is refused** after the one rebase-and-retry, STOP and report it
+   as a ruleset problem to fix — never leave the artifacts local-only or on an unmerged branch
+   and carry on.
 
-8. **Stop.** Last act: `.icm/scripts/usage-snapshot.sh <slug> scope end` (commit and push that
-   line with the rest — it is inside the run folder the path guard allows). Return the
-   `main`-branch links for `story.md`, `scope.md` and `breakdown.md` for the human to review, the stub count and order, and the `## Open for Define` list. The next step,
+8. **Stop.** The usage line — `.icm/scripts/usage-snapshot.sh <slug> scope end` — is taken just
+   before step 7's commit, so it rides the ticket PR with the rest (it is inside the run folder
+   the path guard allows).
+   Return the ticket PR, the base-branch links for `story.md`, `scope.md` and `breakdown.md` for
+   the human to review, the stub count and order, and the `## Open for Define` list. The next step,
    when they are happy, is `/pipeline new`, which walks the batch into Define. A scope they are not
-   happy with is deleted (the run folder and the intake folder) and Scope is run again from the
-   source — there is no revise path and nothing to patch in place.
+   happy with is deleted (the run folder and the intake folder, in a ticket PR of its own) and
+   Scope is run again from the source — there is no revise path and nothing to patch in place.
 
-On the push the source **freezes**: `_source/story.md` is never edited again, and the canonical
+On the merge the source **freezes**: `_source/story.md` is never edited again, and the canonical
 scope is `scope.md` until Define writes `spec.md`. Any later change to the substance is a visible
 `spec.md` revision that re-opens the **Spec approved** tick. Scope never changes silently.
 
@@ -196,7 +204,8 @@ the only other paths a front writes are its own `run.md` and its own `.icm/intak
 
   `new-run.sh` appends `branch:` + `pr:` at Define — see the full template in `.icm/CONTEXT.md`.
 
-All of it on `main`. No spec, no code, no feature branch, no feature PR.
+All of it on the ticket base branch, through one ticket PR. No spec, no code, no feature branch,
+no feature PR.
 
 ## Verify (before handing off)
 
@@ -209,5 +218,6 @@ All of it on `main`. No spec, no code, no feature branch, no feature PR.
   `RESULT: OK`.
 - **`scope.md` reads plainly** — short sentences, technical facts only where they matter, no jargon
   for its own sake; the operator could hand it to the business as-is.
-- **The artifacts are on `main` and nothing was built** — no spec, no code, no feature branch, no
+- **The artifacts are merged into the ticket base branch and nothing was built** — one ticket PR,
+  merged by this session after its path guard held; no spec, no code, no feature branch, no
   feature PR, and nothing touched outside `.icm/runs/<slug>/**` and `.icm/intake/<slug>/**`.

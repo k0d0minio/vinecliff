@@ -13,13 +13,16 @@
 #                                 a GitHub route, the open pipeline PRs name each item's stage.
 #   4. Queued next                the epics with stubs still to spin out, in build order, plus a count
 #                                 of the smaller items parked in triage.
+#   Sections 3 and 4 read .icm/intake/ on the TICKET BASE BRANCH (decision D38) — the UAT branch
+#   where one is declared, else main (lib/project.sh → pipeline_base_branch): tickets are cut and
+#   closed there, and main's copy on a UAT repo lags until a promotion.
 #
 # It writes ONE markdown file, .icm/output/client-status-latest.md, in plain words: the work items'
 # own titles, never a slug, a branch, a SHA or a check name. Chores, promotions and runs announced
-# `internal` are left out unless --all. It reads git refs first — origin/main for what shipped and
-# what is queued (the board reads main; a live run exists only on its own branch until it merges),
-# origin/<uat.branch> for the batch — and the working tree where a ref is not there, and says which
-# at the foot of the file. GitHub is optional: without a route every live item reads "in progress".
+# `internal` are left out unless --all. It reads git refs first — origin/main for what shipped,
+# origin/<ticket base branch> for what is in progress and queued (a live run exists only on its own
+# branch until it merges), origin/<uat.branch> for the batch — and the working tree where a ref is
+# not there, and says which at the foot of the file. GitHub is optional: without a route every live item reads "in progress".
 #
 # Deterministic for a given repo state and --today. Reads only; nothing is sent, nothing is
 # committed. Whether the report is committed is the repo's call — on main it is what a dashboard
@@ -69,12 +72,16 @@ if [ "$in_git" -eq 1 ] && [ "$fetch" -eq 1 ] && git remote get-url origin >/dev/
   GIT_TERMINAL_PROMPT=0 git fetch origin --quiet >/dev/null 2>&1 || echo "note: git fetch origin failed — reading the refs as last fetched" >&2
 fi
 main_ref=""; [ "$in_git" -eq 1 ] && git rev-parse --verify -q origin/main >/dev/null 2>&1 && main_ref="origin/main"
+# The ticket base branch (D38): the intake is read there, never from main's lagging copy on a UAT repo.
+tb="$(pipeline_base_branch)"; ticket_ref=""
+[ "$in_git" -eq 1 ] && git rev-parse --verify -q "origin/$tb" >/dev/null 2>&1 && ticket_ref="origin/$tb"
 uat_on=0; uat_ref=""; ub=""; uu=""
 if uat_declared; then
   uat_on=1; ub="$(uat_branch)"; uu="$(uat_url)"
   [ "$in_git" -eq 1 ] && git rev-parse --verify -q "origin/$ub" >/dev/null 2>&1 && uat_ref="origin/$ub"
 fi
 sources="${main_ref:-the working tree}"
+[ "$tb" = "main" ] || sources="$sources; the work items from ${ticket_ref:-the working tree}"
 [ "$uat_on" -eq 1 ] && sources="$sources; the UAT batch from ${uat_ref:-the working tree}"
 
 # --- readers: a ref when there is one, the working tree otherwise ------------------------------------------
@@ -210,6 +217,7 @@ fi
 uat_n="${#uat_rows[@]}"
 
 # --- 3. in progress: spun out, not merged — and the open PRs' stages when GitHub answers -----------------
+# The intake is read on the ticket base branch; "merged" is the archive on main or on UAT.
 declare -A p_title=() p_stage=() p_epic=() p_lane=()
 p_order=()
 add_progress() { # <slug> <title> <stage> <epic-title> <lane>
@@ -225,24 +233,24 @@ while IFS= read -r epic; do
     while IFS= read -r f; do
       [ -n "$f" ] || continue; slug="${f%.md}"
       [ -n "${on_main[$slug]:-}" ] || [ -n "${in_uat[$slug]:-}" ] && continue
-      stub="$(read_at "$main_ref" "$intake/triage/_done/$f")"
+      stub="$(read_at "$ticket_ref" "$intake/triage/_done/$f")"
       retired "$stub" && continue
       lane="$(printf '%s\n' "$stub" | dash lane)"
       t="$(printf '%s\n' "$stub" | h1_title)"; [ -n "$t" ] || t="$(humanise "$slug")"
       add_progress "$slug" "$t" "$(lane_words "$lane")" "" "$lane"
-    done < <(ls_md_at "$main_ref" "$intake/triage/_done")
+    done < <(ls_md_at "$ticket_ref" "$intake/triage/_done")
     continue
   fi
-  etitle="$(read_at "$main_ref" "$intake/$epic/breakdown.md" | h1_title)"; [ -n "$etitle" ] || etitle="$(humanise "$epic")"
+  etitle="$(read_at "$ticket_ref" "$intake/$epic/breakdown.md" | h1_title)"; [ -n "$etitle" ] || etitle="$(humanise "$epic")"
   while IFS= read -r f; do
     [ -n "$f" ] || continue; slug="${f%.md}"
     [ -n "${on_main[$slug]:-}" ] || [ -n "${in_uat[$slug]:-}" ] && continue
-    stub="$(read_at "$main_ref" "$intake/$epic/_done/$f")"
+    stub="$(read_at "$ticket_ref" "$intake/$epic/_done/$f")"
     retired "$stub" && continue
     t="$(printf '%s\n' "$stub" | h1_title)"; [ -n "$t" ] || t="$(humanise "$slug")"
     add_progress "$slug" "$t" "in progress" "$etitle" "feature"
-  done < <(ls_md_at "$main_ref" "$intake/$epic/_done")
-done < <(ls_dirs_at "$main_ref" "$intake")
+  done < <(ls_md_at "$ticket_ref" "$intake/$epic/_done")
+done < <(ls_dirs_at "$ticket_ref" "$intake")
 
 gh_note="stages not read (no GitHub route in this environment)"
 if [ "$use_github" -eq 0 ]; then gh_note="stages not read (--no-github)"
@@ -291,7 +299,7 @@ for slug in "${p_order[@]+"${p_order[@]}"}"; do
   prog_n=$((prog_n + 1))
 done
 
-# --- 4. queued: the epics with stubs still to spin out, in build order --------------------------------------
+# --- 4. queued: the epics with stubs still to spin out, in build order (the ticket base branch) -----------
 queue_md=""; queued_n=0
 while IFS= read -r epic; do
   [ -n "$epic" ] || continue
@@ -300,7 +308,7 @@ while IFS= read -r epic; do
   rows=()
   while IFS= read -r f; do
     [ -n "$f" ] || continue; [ "$f" = "breakdown.md" ] && continue
-    stub="$(read_at "$main_ref" "$intake/$epic/$f")"
+    stub="$(read_at "$ticket_ref" "$intake/$epic/$f")"
     retired "$stub" && continue
     seq="$(printf '%s\n' "$stub" | dash sequence | grep -oE '^[0-9]+' || true)"; [ -n "$seq" ] || seq=999
     t="$(printf '%s\n' "$stub" | h1_title)"; [ -n "$t" ] || t="$(humanise "${f%.md}")"
@@ -308,14 +316,14 @@ while IFS= read -r epic; do
     blocked="$(printf '%s\n' "$stub" | dash blocked)"
     mark=""; [ "$pr" = "P0" ] && mark=" _(priority)_"; [ -n "$blocked" ] && mark="$mark _(waiting on: $blocked)_"
     rows+=("$(printf '%s\t%s%s' "$seq" "$t" "$mark")")
-  done < <(ls_md_at "$main_ref" "$intake/$epic")
+  done < <(ls_md_at "$ticket_ref" "$intake/$epic")
   [ "${#rows[@]}" -gt 0 ] || continue
-  etitle="$(read_at "$main_ref" "$intake/$epic/breakdown.md" | h1_title)"; [ -n "$etitle" ] || etitle="$(humanise "$epic")"
+  etitle="$(read_at "$ticket_ref" "$intake/$epic/breakdown.md" | h1_title)"; [ -n "$etitle" ] || etitle="$(humanise "$epic")"
   queue_md="$queue_md"$'\n'"**$etitle**"$'\n'
   queue_md="$queue_md$(printf '%s\n' "${rows[@]}" | sort -t"$(printf '\t')" -k1,1n | awk -F'\t' '{ printf "%d. %s\n", NR, $2 }')"$'\n'
   queued_n=$((queued_n + ${#rows[@]}))
-done < <(ls_dirs_at "$main_ref" "$intake")
-triage_n="$(ls_md_at "$main_ref" "$intake/triage" | wc -l | tr -d ' ')"
+done < <(ls_dirs_at "$ticket_ref" "$intake")
+triage_n="$(ls_md_at "$ticket_ref" "$intake/triage" | wc -l | tr -d ' ')"
 
 # --- render ---------------------------------------------------------------------------------------------------
 {

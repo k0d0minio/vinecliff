@@ -80,13 +80,15 @@ overruns on a one-line `Context budget:` note in `spec.md`.
    executes it and rewrites it when reality disagrees. Fill any `none` the seed left in
    `project.md`, set `status.md` (`phase: define`), write `handoff.md` ("tick Spec approved, then
    `build <slug>`"), commit and push those with the run.
-   **Branch check first:** the script opens the PR from the _current_ branch. The front commits
-   straight to `main`, so start from a fresh branch off the pipeline's **base branch** before
-   running the script — `origin/main`, or the UAT branch where the repo declares one
-   (`.icm/project.json` → `uat.branch`; `.icm/uat/CONTEXT.md`), in which case bring `origin/main`
-   into it too, because the stub you are consuming was pushed to `main` — never a branch whose PR
-   has already merged. The PR targets that same base; on a UAT repo the script brings `main` in
-   itself when it finds it missing, and warns when the branch was not cut from the UAT branch.
+   **Branch check first:** the script opens the PR from the _current_ branch, so start from a
+   fresh branch off the pipeline's **base branch** before running it — `origin/main`, or the UAT
+   branch where the repo declares one (`.icm/project.json` → `uat.branch`;
+   `lib/project.sh → pipeline_base_branch`; `.icm/uat/CONTEXT.md`) — never a branch whose PR has
+   already merged. That base is also the **ticket base branch** (D38): the stub you are consuming
+   landed there through Scope's ticket PR, so a branch cut from it already carries it. The PR
+   targets that same base; on a UAT repo the script brings `origin/main` in itself when it finds
+   it missing (a hotfix not yet synced), and warns when the branch was not cut from the UAT
+   branch.
 
 6. **Revising — `revise <slug> "<what to change>"`.** The one command that changes an existing
    spec; it enters here, not at step 1. Resolve the run first (`_shared/stage-preamble.md` —

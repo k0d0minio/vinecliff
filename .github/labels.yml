@@ -42,6 +42,9 @@
 - name: "type:promote"
   color: "5319e7"
   description: "Lane — a signed-off UAT batch promoted to production; the operator merges"
+- name: "type:tickets"
+  color: "ededed"
+  description: "Ticket PR — .icm/intake (and a Scope front) only, merged at once into the ticket base branch (D38)"
 
 # --- Complexity — mirrors the spec header, and sets Release's code-review effort ------------------
 - name: "complexity:trivial"

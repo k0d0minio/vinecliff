@@ -19,7 +19,7 @@
 #   status                  the batch as the UAT branch holds it, cross-checked against git (runs
 #                           archived on the UAT branch and not on main), the fixed address, the
 #                           sign-off state, an open promotion PR if there is one, and how far main
-#                           has moved ahead (a hotfix UAT lacks). Read-only.
+#                           has moved ahead (a hotfix or knowledge-lane change UAT lacks). Read-only.
 #                                                        RESULT: UAT <n> stub(s) · <state> · main ahead <k>
 #   init                    writes .icm/uat/batch.json when missing and prints the one-time checklist
 #                           the OPERATOR completes by hand — push the branch once, protect it like
@@ -36,8 +36,10 @@
 #                           the run out on the branch, pushes, and STOPS. The operator merges from
 #                           GitHub. Refuses an empty batch, a dirty tree, an approval without --by.
 #                                                                          RESULT: OPENED #<pr>
-#   sync [--dry-run]        AFTER the promotion PR merged — and after any hotfix that went to main
-#                           directly: brings origin/main into the UAT branch in a throwaway worktree
+#   sync [--dry-run]        AFTER the promotion PR merged — and, REQUIRED, after any hotfix or
+#                           knowledge-lane change that merged into main: until it runs, the board
+#                           (which reads the UAT branch — the ticket base branch, D38) shows that
+#                           work's stub as open. Brings origin/main into the UAT branch in a throwaway worktree
 #                           (one merge commit; when that merge carries an approved batch that reached
 #                           production, batch.json is reset for the next batch in the same commit, the
 #                           promotion logged under `promotions`), pushes the UAT branch, and — where
@@ -162,7 +164,8 @@ init)
     echo "  [TODO] the UAT branch deploys on the PREVIEW environment's variables unless a custom environment is attached to it in Vercel — decide which data the client tests against (a Neon project with previews: vercel gives it a branch of its own — .icm/uat/CONTEXT.md → The UAT database)"
   fi
   if [ -f .github/labels.yml ] && grep -q 'type:promote' .github/labels.yml; then echo "  [OK]   type:promote in .github/labels.yml"; else echo "  [TODO] add type:promote to .github/labels.yml and create the label in GitHub once (new-run.sh dies without it)"; fi
-  echo "  [INFO] run branches are cut from origin/$ub (with origin/main brought in); PRs target $ub; production is one promotion PR per batch — .icm/uat/CONTEXT.md"
+  echo "  [TODO] if a ruleset on $ub requires status checks, keep the admin bypass on it — a ticket PR (only .icm/ markdown) merges into $ub at once through it, waiting for no check (D38; the pr-conventions skill → The ticket PR)"
+  echo "  [INFO] run branches are cut from origin/$ub (with origin/main brought in); PRs target $ub; tickets are cut and closed on $ub (the ticket base branch, D38); production is one promotion PR per batch — .icm/uat/CONTEXT.md"
   [ "$changed" -eq 1 ] && echo "RESULT: INIT" || echo "RESULT: UNCHANGED"
   exit 0 ;;
 
@@ -212,7 +215,7 @@ status)
   if has_ref origin/main; then
     ahead="$(git_c rev-list --count "$ref..origin/main" 2>/dev/null || echo 0)"
     behind="$(git_c rev-list --count "origin/main..$ref" 2>/dev/null || echo 0)"
-    [ "$ahead" -gt 0 ] && echo "main is ahead of $ub by $ahead commit(s) — a hotfix or an intake cut UAT lacks: .icm/scripts/promote-uat.sh sync brings them in (the next run's new-run.sh does too)"
+    [ "$ahead" -gt 0 ] && echo "main is ahead of $ub by $ahead commit(s) — a hotfix or a knowledge-lane change UAT lacks, and the board shows its stub open until it lands: .icm/scripts/promote-uat.sh sync brings them in (the next run's new-run.sh does too)"
     if [ "$behind" -gt 0 ]; then
       if [ "${#stubs[@]}" -gt 0 ]; then echo "$ub is ahead of main by $behind commit(s) — the batch, waiting for the promotion"
       else echo "$ub is ahead of main by $behind commit(s) — bookkeeping only (a sync's merge and the batch reset); the batch is empty"; fi

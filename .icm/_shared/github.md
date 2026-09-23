@@ -101,26 +101,25 @@ default, and never something a session opts into on its own behalf.
 
 ## The PR regimes
 
-1. **The front (Scope)** — no feature PR exists yet, and none is opened. Scope pushes `run.md`,
-   `01_scope/_source/story.md`, `01_scope/output/scope.md` and the intake cut straight to `main`
-   in one commit, so the scope is never trapped on one device. **The path guard:** a front push
-   touches only `.icm/runs/<scope-slug>/**` and `.icm/intake/<scope-slug>/**`. Anything outside
-   those two → STOP and ask; the front writes markdown, never code. **There is no PR and no
-   docs-only-PR fallback.** `main`'s branch protection requires the repo's required status
-   check(s) (`required_checks` in `.icm/project.json`), which no direct push can carry, so a
-   direct push lands only for an identity on the protection's bypass list:
-   - **the operator's identity** — a Scope run in the operator's local session pushes the front.
-   - **a cloud session's identity** — a `claude.ai/code` session pushes `main` under its own
-     identity; where that identity is on the bypass list, Scope runs from a cloud session and
-     pushes the front itself. Such a push is accepted with a `remote: Bypassed rule violations
-     for refs/heads/main` notice naming the required check — that is the bypass working, not a
-     refusal.
+1. **The front (Scope) — a ticket PR (D38).** No feature PR exists yet, and none is opened. Scope
+   carries `run.md`, `01_scope/_source/story.md`, `01_scope/output/scope.md` and the intake cut in
+   one commit on `claude/tickets-<slug>-<YYYYMMDD>`, opens a **ticket PR** into the repo's
+   **ticket base branch** — `lib/project.sh → pipeline_base_branch`: the UAT branch where
+   `.icm/project.json` declares one, else `main` — and **merges it at once**, so the scope is
+   never trapped on one device and the stub exists for `new` the moment it lands. The ticket PR's
+   shape (branch, title `Scope: <slug> — intake cut`, label `type:tickets`, `- announce: none`,
+   `- audience: internal`) and its merge rule — verify the path guard, then squash-merge without
+   waiting for any check, `--admin` where a ruleset requires checks, a refused merge rebased and
+   retried once — live in `.claude/skills/pr-conventions/SKILL.md` → The ticket PR; read them
+   there. **The path guard:** the front touches only `.icm/runs/<scope-slug>/**` and
+   `.icm/intake/<scope-slug>/**`. Anything outside those two → STOP; never merge it — the front
+   writes markdown, never code. It is the one PR a session merges itself; the scope is still
+   reviewed by the operator before `new`, on the base branch.
 
-   Which identities are verified for this repo is the repo's own record
-   (`_shared/project-rules.md` → People and gates). A refused push is a **branch-protection
-   problem to fix** (add the identity to the bypass list), never a reason to open a PR: Scope
-   STOPs and reports it. Record the answer for any newly verified identity there, never here —
-   this file is template-owned.
+   This reverses the regime's first shape: the front used to push straight to `main` under an
+   identity on the protection's bypass list. On a UAT repo that birthed a stub on `main` while its
+   run's close-out retired it on the UAT branch, so the board — reading `main` — showed finished
+   work as open until the next promotion. A stub is now born where it dies.
 
 2. **The spine (Define → Release)** — **exactly one PR per run.** Define opens it once (via
    `new-run.sh` → `create_pull_request`, draft); every later stage adds commits to the same
@@ -222,10 +221,11 @@ a human in the GitHub UI (fast-lane PRs, above):
   ticked **Ready to merge** box _is_ the merge authorisation — it also attests that the operator
   has smoke-tested the preview by hand, which is why Release re-asks for no manual checks. On a
   lane PR the same attestation is the merge click itself. (The one other hard gate — the scope
-  reviewed on `main` before `new` — lives outside the PR.)
+  reviewed on the ticket base branch before `new` — lives outside the PR.)
 - **Both boxes are the operator's to tick.** The business's involvement happens earlier and ends
-  there: the scope is settled with the operator at Scope and pushed to `main` for review. From
-  Define onward no gate waits on the business; the checkboxes record the operator's decisions.
+  there: the scope is settled with the operator at Scope and merged into the ticket base branch
+  for review. From Define onward no gate waits on the business; the checkboxes record the
+  operator's decisions.
   Nothing else ever ticks them — there is no scripted exception.
 - **The boxes bind the agent, not the merge button.** What branch protection on `main` requires
   is the repo's required check(s) (`required_checks` in `.icm/project.json`; `.icm/_shared/ci.md`);
