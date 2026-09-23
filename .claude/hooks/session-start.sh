@@ -2,8 +2,27 @@
 # session-start.sh — canonical estate hook (icm-board _system/template/claude/hooks/).
 # Opens every session in this repo knowing its own board: open stubs per epic (with the
 # next in sequence), the triage backlog, and any legacy flat tickets still unmigrated.
-# Read-only; quiet on failure — a hook must never break session start.
+# Quiet on failure — a hook must never break session start (exit 0, always).
+#
+# What it does, in order:
+#   0. In a Claude Code cloud container only (CLAUDE_CODE_REMOTE=true) with no rsync on PATH
+#      and apt-get present: install rsync, which .icm/scripts/env-check.sh requires — the cloud
+#      image ships without it, so every /setup there would end `[FAIL] Missing required binary:
+#      rsync`. One retry after `apt-get update`; all output discarded; on failure one line says
+#      env-check.sh will FAIL on rsync. A local machine is never touched. The only step that
+#      writes anything.
+#   1. The cloud env hydrate step (vercel-env-hydrate.sh), where the repo carries it.
+#   2. The capability-skills registry, where the repo has .icm/skills/.
+#   3. The board: open stubs per epic, triage, legacy flat tickets.
 set -uo pipefail
+
+# 0. rsync in a cloud container. `timeout` bounds a held dpkg lock; nothing here can fail the session.
+if [[ "${CLAUDE_CODE_REMOTE:-}" == "true" ]] && ! command -v rsync >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+  apt_rsync() { DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y -qq rsync >/dev/null 2>&1; }
+  if ! apt_rsync && ! { DEBIAN_FRONTEND=noninteractive timeout 180 apt-get update -qq >/dev/null 2>&1; apt_rsync; }; then
+    echo "session-start: could not install rsync in this cloud container — .icm/scripts/env-check.sh will FAIL on rsync (and setup.sh report GAPS) until it is on PATH."
+  fi
+fi
 
 # The cloud env step, in repos that carry it. It lives in its own file — reporting a
 # board and hydrating an environment are different jobs, and only one of them touches the

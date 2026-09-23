@@ -26,3 +26,4 @@
 | a preview row `Skipped - Not affected` | nothing built for that project | it hosts no smoke; not evidence of green |
 | `deploy-status.sh` → `ERROR <project>` | production deploy failed | stop; the recovery is `rollback.sh` + the `hotfix` lane, human-invoked |
 | `env.sh audit --changed` → `GAPS` | a key is missing from a surface | declare it, tell the operator where the value goes; never invent one |
+| `env.sh audit --changed` → `UNKNOWN` | a surface could not be read (rate limit, or a project the token cannot see) | re-run once; if it holds, `env-check.sh` names the project — not OK, and not a gap to "fix" |

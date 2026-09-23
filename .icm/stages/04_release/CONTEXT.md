@@ -112,7 +112,8 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
 4. **Run the review passes, then triage every finding by the rule.**
    - **Readiness, measured first:** `.icm/scripts/env.sh audit --changed` → `RESULT: OK`. `GAPS`
      is stop class 3 with the rows naming the fix (declare the key, add it where it is scoped —
-     the value is the operator's). A `support.tier` of `basic`/`retainer` with no fail-safe page
+     the value is the operator's). `UNKNOWN` is not `OK`: a surface could not be read — re-run
+     once, then stop and say which (`env-check.sh` names a project the token cannot see). A `support.tier` of `basic`/`retainer` with no fail-safe page
      or Sentry key (`setup.sh` section 11) is the same class.
    - **The gate, over the whole branch:** `.icm/scripts/security-check.sh <slug> --branch --audit`
      → `RESULT: OK` — the deterministic input to stop class 2 (a leaked secret, a known-high

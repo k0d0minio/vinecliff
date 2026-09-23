@@ -280,7 +280,7 @@ fi
 # --- 4. environment ---------------------------------------------------------------------------------------------
 echo "[4/11] Environment — the route, the binaries, the keys (names only)"
 if [ -x "$here/env-check.sh" ]; then r="$(last_line "$here/env-check.sh")"; case "$r" in *PASS*) ok "env-check.sh → $r" ;; *) fail "env-check.sh → ${r:-no verdict} (run it for the lines)" ;; esac; else fail "env-check.sh missing"; fi
-if [ -x "$here/env.sh" ]; then r="$(last_line "$here/env.sh" audit)"; case "$r" in *"RESULT: OK"*) ok "env.sh audit → $r" ;; *GAPS*) warn "env.sh audit → $r (run .icm/scripts/env.sh audit for the rows — each names its fix)" ;; *) info "env.sh audit → ${r:-no verdict}" ;; esac; else fail "env.sh missing"; fi
+if [ -x "$here/env.sh" ]; then r="$(last_line "$here/env.sh" audit)"; case "$r" in *"RESULT: OK"*) ok "env.sh audit → $r" ;; *GAPS*) warn "env.sh audit → $r (run .icm/scripts/env.sh audit for the rows — each names its fix)" ;; *UNKNOWN*) warn "env.sh audit → $r (a surface could not be read — env-check.sh above says whether the token sees every project)" ;; *) info "env.sh audit → ${r:-no verdict}" ;; esac; else fail "env.sh missing"; fi
 
 # --- 5. tickets ---------------------------------------------------------------------------------------------------
 echo "[5/11] Tickets — every live epic's bookkeeping, the parking lane, nothing loose"
