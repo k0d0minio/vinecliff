@@ -96,7 +96,10 @@ open the rest of the docs tree "for consistency"; the map plus one page is the w
    `.icm/scripts/ci-status.sh --pr <number>` → `GREEN` (a markdown-only diff settles in about a
    minute; a CI knowledge-map step, where the repo runs one, is advisory and cannot red it), fix
    and push on `RED`, then **stop** and hand the PR URL to the operator. The merge is theirs,
-   from GitHub.
+   from GitHub. **On a UAT repo** the PR still targets `main`, and the hand-off names the
+   required follow-up: `promote-uat.sh sync` after the merge, because the UAT branch — the base
+   every run is cut from and the ticket base branch the board reads (D38) — does not carry the
+   page until it runs (`.icm/uat/CONTEXT.md`).
 
 ## Outputs
 

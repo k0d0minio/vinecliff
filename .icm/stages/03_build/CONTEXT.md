@@ -169,7 +169,12 @@ everything except the source files you actually edit. Record overruns on a one-l
     STOP** (someone else wrote to this run — the preamble's run-folder rule). When the branch
     carries a migration: `.icm/scripts/check-migrations.sh` → `OK` or `SKIP` here, where a
     `STALE`/`MISNAMED` costs a cheap-tier push instead of a full gate (`--apply` renames; commit
-    the renames; reset the run's database — the `database-migration` skill). Then the branch
+    the renames; reset the run's database — the `database-migration` skill). On a MongoDB repo
+    with `database.isolation: database`, then `.icm/scripts/db-branch.sh <slug> prove` →
+    `PROVEN` or `SKIP`: this branch's own migrations up → down → up on the run's database, the
+    indexes restored by `down` where `migrations.reversible` is true, and a second `up` changing
+    nothing. `UNPROVEN n` is a fix on this branch (a missing or incomplete `down`, a migration
+    that is not idempotent), never a flip with a note. Then the branch
     as a whole through the gate once: `.icm/scripts/security-check.sh <slug> --branch` → `OK`.
     Release's step 7(a) stays as the final merge and is usually a no-op after this. A merge
     that changed code takes the cheap tier again: re-run step 9's `ci-status.sh` before flipping.

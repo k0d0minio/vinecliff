@@ -11,9 +11,43 @@ working knowledge.
 ## Branches and what goes where
 
 - Code changes go through a **PR on a `claude/` branch** — never straight to `main`.
-- **Ticket-only commits go straight to `main`** (planning is data): only `.icm/` paths,
-  message `Plan: <one line>` or `Wrap: <one line>`.
+- **Ticket state goes through a ticket PR into the repo's ticket base branch** (below) —
+  never a direct push. Stubs a run parks or consumes ride that run's own PR instead.
+- **icm-board alone is exempt:** it has no UAT branch and nothing to drift, so its ticket
+  commits (`Plan:` / `Wrap:`, `today.md`) and `Deal:` commits go straight to its `main`.
+  The exemption is icm-board's only — no other repo takes it (D38).
 - Never rewrite history on a shared branch; never force-push `main`.
+
+## The ticket PR — the one PR an agent merges
+
+A repo's ticket state (`.icm/intake/`) has **one home: its ticket base branch** — the UAT
+branch where `.icm/project.json` declares `uat`, else `main`. Where the repo carries the
+pipeline, `.icm/scripts/lib/project.sh → pipeline_base_branch` answers it; ask that, never
+re-derive it. The board reads that branch, so **merging is publishing** — an unmerged stub
+does not exist. Every ticket change outside a run — a cut, a move to `_done/`, a drop, an
+epic archive, Scope's front, a parked template change — takes this one shape:
+
+- **Branch** `claude/tickets-<topic>-<YYYYMMDD>`, cut from `origin/<base>`; the PR targets
+  `<base>`. Stage paths explicitly.
+- **Title** `Plan: <one line>` · `Wrap: <one line>` · `Scope: <slug> — intake cut`.
+- **Label** `type:tickets`. **Body** carries `- announce: none` and `- audience: internal`,
+  so no release workflow ever announces it to the client.
+- **The path guard:** `.icm/intake/**` — plus `.icm/runs/<slug>/**` for Scope's front, and
+  nothing else. A diff touching anything outside it is not a ticket PR.
+
+**Landing it — verify the guard, then merge at once.** The session that opened the ticket
+PR merges it immediately, and nobody else does:
+
+1. `git diff --name-only origin/<base>...HEAD` lists only guarded paths. Anything else →
+   **STOP; never merge it**, and say what strayed in.
+2. `gh pr merge <n> --squash` — without waiting for Vercel or any other check: the diff is
+   ticket markdown, there is nothing for a check to catch. Where a ruleset requires checks,
+   `gh pr merge <n> --squash --admin` (the admin bypass exists for this; keep it).
+3. A PR that no longer merges cleanly (a run's close-out moved the same stub) is rebased on
+   `origin/<base>` and retried once; still refused → report it and stop.
+
+GitHub auto-merge is not used. Code, lane and promotion PRs stay the operator's to merge —
+the ticket PR is the only exception, because its guard proves it carries no code.
 
 ## Committing
 

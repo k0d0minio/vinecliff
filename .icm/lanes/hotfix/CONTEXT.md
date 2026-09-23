@@ -17,7 +17,9 @@ and the recovery. Fix-forward stays the default; a revert is *available*, prepar
 `rollback.sh`, and still the operator's merge. **It bypasses UAT:** where the repo declares a UAT
 environment every other PR targets the UAT branch, but a hotfix targets `main` — production is
 wrong now — and `.icm/scripts/promote-uat.sh sync` afterwards carries the fix into UAT
-(`.icm/uat/CONTEXT.md`).
+(`.icm/uat/CONTEXT.md`). That `sync` is **required**: the close-out rides this PR into `main`, but
+the repo's ticket base branch is the UAT branch (D38), so until `sync` runs the board still shows
+what this run retired as open.
 
 ## Inputs (read only these)
 
@@ -78,6 +80,8 @@ Context budget: the Inputs table above is the budget (see `.icm/CONTEXT.md` → 
    back — that production is on the previous deployment until this PR merges. "Smoke-test, then
    squash-merge from GitHub." After their merge, Release's rule applies to a lane too: nothing
    watches production; the operator may run `deploy-status.sh --sha <merge-sha>` once, by hand.
+   On a UAT repo the stop message also names the required follow-up: `promote-uat.sh sync`
+   after the merge.
 
 ## Outputs
 

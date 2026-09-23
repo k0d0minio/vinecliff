@@ -49,6 +49,10 @@ not — the prompt is the brief either way.
 
 - Any plan, backlog or task list becomes stubs here — **never a loose `TODO.md` or
   `BACKLOG.md`**. Cutting what's left is part of ending any session.
-- The board reads `main` via the GitHub API — a stub exists once pushed.
+- The board reads each repo's **ticket base branch** — the UAT branch where
+  `.icm/project.json` declares one, else `main` (`lib/project.sh → pipeline_base_branch`)
+  — so a stub exists once its PR merges there. Outside a run, every ticket change is a
+  **ticket PR** the session merges at once (`pr-conventions` → The ticket PR); inside a run
+  it rides the run's PR. icm-board alone commits its tickets straight to `main`.
 - Legacy flat `PREFIX-NNN` tickets (pre-2026-08-28) are left as they are — migrating a
   repo is `/project`'s judgment work, not a side effect of another task.

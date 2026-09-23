@@ -117,8 +117,13 @@ if [ -f ".icm/project.json" ]; then
                  elif ! command -v curl >/dev/null 2>&1; then warn "database.isolation is \"neon\" but curl is not in PATH — db-branch.sh will SKIP"
                  elif [ -z "${!nk:-}" ]; then warn "database.isolation is \"neon\" but \$$nk is unset in this environment — db-branch.sh will SKIP (export it; never in git)"
                  else ok "database.isolation: neon (curl found, \$$nk set)"; fi ;;
-      none|"")   info "database.isolation: none — db-branch.sh says SKIP; declare neon|schema|container to give each run its own database" ;;
-      *)         warn ".icm/project.json database.isolation is \"$iso\" (expected none|schema|container|neon — read as none)" ;;
+      database)  ue="$(jq -r '.database.url_env // "MONGODB_URI"' .icm/project.json)"
+                 if [ "$(jq -r '.database.provider // empty' .icm/project.json)" != "mongodb" ]; then warn "database.isolation is \"database\" but database.provider is not mongodb — db-branch.sh will SKIP"
+                 elif ! command -v node >/dev/null 2>&1; then warn "database.isolation is \"database\" but node is not in PATH — db-branch.sh will SKIP"
+                 elif [ -z "${!ue:-}" ]; then warn "database.isolation is \"database\" but \$$ue is unset in this environment — db-branch.sh will SKIP (export the cluster URI; never in git)"
+                 else ok "database.isolation: database (node found, \$$ue set)"; fi ;;
+      none|"")   info "database.isolation: none — db-branch.sh says SKIP; declare neon|schema|container|database to give each run its own database" ;;
+      *)         warn ".icm/project.json database.isolation is \"$iso\" (expected none|schema|container|neon|database — read as none)" ;;
     esac
     if [ "$(jq -r '.database.provider // empty' .icm/project.json)" = "neon" ]; then
       if [ -z "$(jq -r '.database.neon.project_id // empty' .icm/project.json)" ]; then warn "database.provider is neon but database.neon.project_id is empty — db-env.sh and the cleanup workflow have no project to read"

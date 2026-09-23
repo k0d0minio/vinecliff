@@ -35,7 +35,8 @@ step 8; step 9 reads UAT instead of production and announces nothing (the promot
    reports `GAPS` (a key this branch added is missing from a surface it is scoped to); a
    migration without a working `down` **in a repo that declares `migrations.reversible: true`**
    (forward-only repos are exempt — a revert there is the hotfix lane's, prepared by
-   `rollback.sh`); an index/migration mismatch; a support tier of `basic` or `retainer` with no
+   `rollback.sh`; on a MongoDB repo with `database.isolation: database` it is measured, not read:
+   `db-branch.sh <slug> prove` → `UNPROVEN`, step 7); an index/migration mismatch; a support tier of `basic` or `retainer` with no
    fail-safe page or no Sentry key (`setup.sh` section 11 — report, never repair here).
 
 Every other finding — style, structure, "should be refactored", anything not this ticket's — is
@@ -189,6 +190,20 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
    re-made (`down`, then `up`; the `database-migration` skill). The script renames and never
    commits; it never touches a migration `main` already has.
 
+   **On a MongoDB repo with `database.isolation: database`, prove the migrations on the head
+   that will merge** — after the order check, because a re-stamp is exactly what the proof's
+   last step replays:
+
+   ```bash
+   .icm/scripts/db-branch.sh <slug> prove
+   ```
+
+   `RESULT: PROVEN` or `SKIP` → carry on. `RESULT: UNPROVEN <n>` → stop class 3: a `down` that is
+   missing or does not restore the indexes (where `migrations.reversible` is true), an `up` that
+   does not reproduce its shape, or an `up` that is not idempotent — the lines above the verdict
+   say which file and which. The fix is on this branch, like a re-stamp; the `## Release`
+   record's `- migrations:` line says `proven` once it reads `PROVEN`.
+
    **(b) Run the retrospective, then append the `## Release` record.** First, while the run
    folder is still live:
 
@@ -250,8 +265,10 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
    **(a) Production, once.** `.icm/scripts/deploy-status.sh --sha <merge-sha>` — it waits,
    bounded, for the merge commit's production deployment(s) and prints the one line the record
    takes: `- production: READY on <sha> — web dpl_… (prev dpl_…) · docs dpl_…`, or
-   `ERROR <project> — see the hotfix lane`, or `PENDING` after the bound, or
-   `not declared (no deploy block)`. An `ERROR` un-merges nothing and starts nothing: it is a
+   `ERROR <project> — see the hotfix lane`, or `PENDING` after the bound, or `SKIPPED` when
+   every project's ignore step canceled its build (a merge touching no app — production
+   unchanged, the live deployment named; one skipped project beside READY ones stays `READY`),
+   or `not declared (no deploy block)`. An `ERROR` un-merges nothing and starts nothing: it is a
    line in the record and the operator's call to open `/pipeline hotfix`. **On a UAT repo** the
    PR merged into the UAT branch, so read that instead — `.icm/scripts/deploy-status.sh --sha
    <merge-sha> --uat` — which prints `- uat: READY on <sha> — web dpl_… · <the fixed UAT
@@ -306,7 +323,7 @@ Appended to `.icm/runs/<slug>/03_build/output/notes.md`:
 - ci: GREEN on <sha> (ci-status.sh, after the last push)
 - reviews: code <effort> · security <security-check.sh --branch --audit: OK | BLOCKED → sent back | audit waived — <advisory>, <why> (the operator)> <+ /security-review — result | n/a> · readiness <env.sh audit --changed: OK | n/a>
 - parked: <triage stub filename(s) | none>
-- migrations: <ok | skip — none of this run's own | re-stamped <n> after main (check-migrations.sh --apply)>
+- migrations: <ok | skip — none of this run's own | re-stamped <n> after main (check-migrations.sh --apply)>[ · proven (db-branch.sh prove) — a MongoDB repo with isolation: database]
 - learned: <n rule(s) appended to _shared/project-rules.md | none | skip — no error.log>
 - docs: <pages updated | no docs impact> · announce: <public | internal | none | deferred to CI | deferred to promotion>
 ```
@@ -330,6 +347,8 @@ all in the one PR.
   operator's words, not yours.
 - `check-migrations.sh` read `OK` or `SKIP` on the head that merged — after the merge of `main`,
   and after any re-stamp it asked for. A `STALE` was fixed on the branch, never merged past.
+  On a MongoDB repo with `database.isolation: database`, `db-branch.sh <slug> prove` read
+  `PROVEN` or `SKIP` after it; an `UNPROVEN` was fixed on the branch, never merged past.
 - `retrospective.sh` ran on the live run folder **before** the close-out moved it; what it
   appended is in the head that merged, and the record's `- learned:` line says how many. A rule
   you judged a slip was deleted from the file, never left for the next run to obey.

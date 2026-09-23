@@ -42,8 +42,9 @@ validate-knowledge-map,report}.sh`, `runs/README.md`), `intake/`, `runs/`, `docs
    `found-by: template-change · <YYYY-MM-DD>`, the request whole as its `## Prompt`. It is a
    **pointer, never a cut**: no lane in this repo consumes it — a chore run on it would be the
    edit this file forbids — and the board's "Copy prompt" hands its `## Prompt` to an icm-board
-   session. Committed as any parked finding is: on the run's branch inside a run, straight to
-   `main` as a ticket-only commit outside one. If a stub with the same `found-by` source already
+   session. Committed as any parked finding is: on the run's branch inside a run; outside one, a
+   ticket PR into the ticket base branch, merged at once
+   (`.claude/skills/pr-conventions/SKILL.md` → The ticket PR). If a stub with the same `found-by` source already
    names the same file (`grep -l 'found-by: template-change' .icm/intake/triage/*.md`), add the
    new evidence under its `## Problem` rather than parking a second.
 4. **Hand it over and carry on.** Show the prompt whole in the reply. The work in front of you

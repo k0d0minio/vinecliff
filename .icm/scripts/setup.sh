@@ -21,7 +21,8 @@
 #    3. project.json  name, complexity, required_checks, personas, deploy, reporting, migrations
 #                  (stamp/tool/out_of_order), database (isolation, provider — a Neon project is
 #                  read once when its key is in the shell: production branch, preview branching,
-#                  the UAT branch), security, support, health_endpoint, uat — missing or still at
+#                  the UAT branch; a MongoDB cluster's names and commands, and the cluster read
+#                  once when its URI is in the shell — D35), security, support, health_endpoint, uat — missing or still at
 #                  the stub's value is a line with the question; a declared UAT environment is
 #                  checked (url, batch.json, the branch on origin) and `--fix` seeds the empty
 #                  batch.json; undeclared is one info line, never a gap.
@@ -36,8 +37,10 @@
 #    9. Reporting  kinds → channels; unset channel variables; announce_from vs the workflow.
 #   10. Workflows  the reference release.yaml / labels.yaml present, or declared absent in
 #                  _shared/project-rules.md; neon-cleanup.yaml where a Neon project branches per
-#                  preview (`--fix` seeds it from --template); type:hotfix and type:handover (and
-#                  type:promote on a UAT repo) in .github/labels.yml.
+#                  preview, mongodb-cleanup.yaml where a MongoDB repo has a database per preview
+#                  (`--fix` seeds either from --template); type:hotfix, type:handover and
+#                  type:tickets (the ticket PR's label, D38 — and type:promote on a UAT repo) in
+#                  .github/labels.yml.
 #   11. Support    tier none → nothing; micro → `micro: no support line`; basic|retainer → the
 #                  fail-safe page exists, the Sentry key is declared [production], alert maps to
 #                  a channel or project-rules.md records the red-job default.
@@ -221,7 +224,8 @@ if [ -f .icm/project.json ]; then
   else warn "reporting block absent — read as announce: [github-release], alert: none; add the block to change it"; fi
   if [ -n "$(migrations_paths)" ]; then ok "migrations: $(migrations_paths | paste -sd', ' -) · reversible: $(migrations_reversible) · stamp: $(migrations_stamp) · tool: $(migrations_tool) · out_of_order: $(migrations_out_of_order)"; else info "migrations.path empty — check-migrations.sh looks for tracked migrations/ folders; rollback.sh assumes forward-only (reversible: false); stamp: $(migrations_stamp), tool: $(migrations_tool)"; fi
   case "$(database_isolation)" in
-    none) warn "database.isolation: none — does this repo have a database? neon (one Neon branch per run — curl and the key named by database.neon.api_key_env, no psql), schema (one Postgres schema per run on \$$(database_url_env)) or container (one local Postgres per run) gives each run its own; none is right for a repo without one" ;;
+    none) warn "database.isolation: none — does this repo have a database? neon (one Neon branch per run — curl and the key named by database.neon.api_key_env, no psql), database (one MongoDB database per run on the repo's cluster — node and its driver), schema (one Postgres schema per run on \$$(database_url_env)) or container (one local Postgres per run) gives each run its own; none is right for a repo without one" ;;
+    database) if [ "$(database_provider)" = mongodb ]; then ok "database: database isolation — run_<slug> on the cluster \$$(database_url_env) names, migrated and seeded by the repo's own commands"; else fail "database.isolation is database but database.provider is not mongodb — set provider: mongodb and the database.mongodb block"; fi ;;
     neon) if [ "$(database_provider)" = neon ]; then ok "database: neon isolation — run/<slug> branches of $(neon_production_branch), via \$$(database_url_env)"; else fail "database.isolation is neon but database.provider is not — set provider: neon and database.neon.project_id"; fi ;;
     *)    ok "database: $(database_isolation) isolation via \$$(database_url_env)$( [ "$(database_isolation)" = container ] && echo " · $(database_image), db $(database_name)")" ;;
   esac
@@ -252,6 +256,22 @@ if [ -f .icm/project.json ]; then
         info "neon: \$$(neon_api_key_env) unset in this shell (or curl missing) — names checked, branches not read; export it and re-run, or db-env.sh status"
       fi
     fi
+  fi
+  if [ "$(database_provider)" = mongodb ]; then
+    mp="$(mongo_production_name)"; ms="$(mongo_preview_name)"
+    if [ -z "$mp" ] || [ -z "$ms" ]; then fail "database.provider is mongodb but database.mongodb.production_name or preview_name is empty — the names of the two long-lived databases (never dropped or reset; every drop refuses them by name)"
+    elif [ "$mp" = "$ms" ]; then fail "database.mongodb.production_name and preview_name are the same ($mp) — previews would share production's database"
+    else ok "mongodb: cluster via \$$(database_url_env) · production $mp · shared preview $ms · name via \$$(mongo_name_env) · previews $(mongo_previews)$( [ -n "$(mongo_uat_database)" ] && echo " · UAT $(mongo_uat_database)") · caps $(mongo_limit_databases)/$(mongo_limit_collections) · names ≤ $(mongo_limit_name_bytes)B"; fi
+    { [ -n "$(mongo_seed_command)" ] && [ -n "$(mongo_migrate_command)" ]; } && ok "mongodb: seed \`$(mongo_seed_command)\` · migrate \`$(mongo_migrate_command)\`" \
+      || fail "database.mongodb.seed_command or migrate_command is empty — the repo's own commands (the migrate command takes up [<name>] [--single] and down <name> [--single]); the template never designs seeding"
+    [ "$(migrations_tool)" = mongodb ] || warn "database.provider is mongodb but migrations.tool is $(migrations_tool) — db-branch.sh prove reads the epoch form a MongoDB runner writes (migrations.stamp: epoch, tool: mongodb)"
+    ue="$(database_url_env)"
+    if [ -n "${!ue:-}" ] && command -v node >/dev/null 2>&1; then
+      if ml="$(node "$here/lib/mongo.mjs" list 2>/dev/null)"; then
+        for n in "$mp" "$ms"; do [ -z "$n" ] || { printf '%s' "$ml" | jq -e --arg n "$n" 'any(.[]; .name == $n)' >/dev/null && ok "mongodb: $n present" || warn "mongodb: no database named $n on the cluster — is the name right?"; }; done
+        ok "mongodb: $(printf '%s' "$ml" | jq 'length') database(s), $(printf '%s' "$ml" | jq --arg a "$ms" --arg b "$mp" '[.[] | select((.name | test("^(run|preview)_")) and .name != $a and .name != $b)] | length') of them the pipeline's (db-env.sh status)"
+      else warn "mongodb: the cluster could not be read via \$$(database_url_env) — node .icm/scripts/lib/mongo.mjs check says why (the repo's dependencies installed?)"; fi
+    else info "mongodb: \$$(database_url_env) unset in this shell (or node missing) — names checked, the cluster not read; export it and re-run, or db-env.sh status"; fi
   fi
   [ -n "$(security_audit_command)" ] && ok "security.audit_command: $(security_audit_command)" || info "security.audit_command empty — security-check.sh audits npm/pnpm/yarn lockfiles it finds; set it for another ecosystem (pip-audit, cargo audit)"
   ok "support: tier $(support_tier)$( [ -n "$(support_failsafe)" ] && echo " · fail-safe $(support_failsafe)") · sentry via \$$(support_sentry_env)"
@@ -367,10 +387,20 @@ if [ "$(database_provider)" = neon ] && [ "$(neon_previews)" = vercel ]; then
   elif [ "$FIX" -eq 1 ] && [ -n "$tmpl_dir" ] && [ -f "$tmpl_dir/github-pipeline/workflows/neon-cleanup.yaml" ]; then seed "$tmpl_dir/github-pipeline/workflows/neon-cleanup.yaml" .github/workflows/neon-cleanup.yaml
   else warn "neon-cleanup workflow absent — the Vercel-managed integration keeps a preview branch until its deployment expires (months); setup.sh --fix --template <path> seeds the reference one, or record the absence in project-rules.md → Reporting → Workflows"; fi
 fi
+if [ "$(database_provider)" = mongodb ] && [ "$(mongo_previews)" = branch ]; then
+  if [ -f .github/workflows/mongodb-cleanup.yaml ] || [ -f .github/workflows/mongodb-cleanup.yml ]; then ok "mongodb-cleanup workflow present (drops preview_<branch> and run_<slug> when a PR closes)"
+  elif grep -qiE "mongodb-cleanup(\.yaml|\.yml)?.*(absent|none|not (used|seeded)|no )" .icm/_shared/project-rules.md 2>/dev/null; then ok "mongodb-cleanup workflow declared absent in project-rules.md"
+  elif [ "$FIX" -eq 1 ] && [ -n "$tmpl_dir" ] && [ -f "$tmpl_dir/github-pipeline/workflows/mongodb-cleanup.yaml" ]; then seed "$tmpl_dir/github-pipeline/workflows/mongodb-cleanup.yaml" .github/workflows/mongodb-cleanup.yaml
+  else warn "mongodb-cleanup workflow absent — nothing drops a closed PR's preview_<branch> database; setup.sh --fix --template <path> seeds the reference one, or record the absence in project-rules.md → Reporting → Workflows"; fi
+fi
 if [ -f .github/labels.yml ]; then
-  lane_labels="type:hotfix type:handover"; uat_declared && lane_labels="$lane_labels type:promote"
-  for l in $lane_labels; do grep -q "$l" .github/labels.yml && ok "$l in .github/labels.yml" || warn "$l missing from .github/labels.yml — add it (and create the label once in GitHub) before the lane's first PR"; done
-else info "no .github/labels.yml — the label vocabulary is not documented here (new-run.sh dies if a type:<lane> label does not exist in GitHub)"; fi
+  lane_labels="type:hotfix type:handover type:tickets"; uat_declared && lane_labels="$lane_labels type:promote"
+  for l in $lane_labels; do
+    if grep -q "$l" .github/labels.yml; then ok "$l in .github/labels.yml"
+    elif [ "$l" = "type:tickets" ]; then warn "type:tickets missing from .github/labels.yml — the ticket PR's label (D38; the pr-conventions skill → The ticket PR): add it, and create it once in GitHub (the operator's act), before the first ticket PR"
+    else warn "$l missing from .github/labels.yml — add it (and create the label once in GitHub) before the lane's first PR"; fi
+  done
+else info "no .github/labels.yml — the label vocabulary is not documented here (new-run.sh dies if a type:<lane> label does not exist in GitHub; a ticket PR needs type:tickets created once in GitHub — D38)"; fi
 
 # --- 11. support -------------------------------------------------------------------------------------------------------
 echo "[11/11] Support — what the deal promised after handover"

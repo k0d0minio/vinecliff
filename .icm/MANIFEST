@@ -19,7 +19,8 @@
 # `skills/<name>/` (three seeded capability skills — `skills/README.md`) and `_shared/run-pack/`
 # (the seven canonical run files `run-pack.sh` seeds into every run) are template-owned like the
 # contracts: no identity, read `project.json` at runtime. A `skills/*/scripts/*.sh` is executable
-# like `scripts/*.sh`; `scripts/lib/` stays sourced-only.
+# like `scripts/*.sh`; `scripts/lib/` stays sourced-only (its two `.mjs` files are run with `node`
+# and imported by the app — lib/db-name.mjs, D35 — never executed directly).
 #
 # A `T` file is changed in icm-board, never in a repo: a request to change one, made in a repo,
 # is a template change request — `_shared/template-change.md` (itself T) says how it is written,
@@ -55,6 +56,8 @@ T scripts/lib/changed-files.sh
 T scripts/lib/project.sh
 T scripts/lib/vercel.sh
 T scripts/lib/neon.sh
+T scripts/lib/mongo.mjs
+T scripts/lib/db-name.mjs
 T scripts/lib/model-prices.json
 T scripts/resolve-run.sh
 T scripts/validate-spec.sh

@@ -60,10 +60,11 @@ every stage and every lane, including the two that never run the procedure above
    a second run in flight gets its own clone, worktree or cloud session, on its own branch.
    Switching one checkout back and forth between two live runs is how a run's uncommitted
    artifacts end up in the other's commit.
-4. **The front is the one writer on `main`, and it is still run-scoped.** Scope has no branch and
-   no PR; it pushes to `main` exactly two folders that carry its slug —
-   `.icm/runs/<slug>/01_scope/` (with `run.md`) and `.icm/intake/<slug>/` — and touches nothing
-   else, so two fronts cannot collide unless they chose the same slug — which is why a slug
+4. **The front writes through a ticket PR, and it is still run-scoped.** Scope has no run branch
+   and no feature PR; it lands on the ticket base branch (`lib/project.sh → pipeline_base_branch`)
+   through one ticket PR it merges at once (`_shared/github.md` → PR regimes, D38) carrying
+   exactly two folders that carry its slug — `.icm/runs/<slug>/01_scope/` (with `run.md`) and
+   `.icm/intake/<slug>/` — and touches nothing else, so two fronts cannot collide unless they chose the same slug — which is why a slug
    whose `.icm/runs/<slug>/` or `.icm/intake/<slug>/` already exists, live or archived, is not
    free to pick.
 5. **What a run may write outside its folder is what its contract names**, and only that: the

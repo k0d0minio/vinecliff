@@ -107,9 +107,9 @@ its contract; `status` and `uat` are script verbs, not stages.
    **Pipeline PRs are never subscribed to PR activity** (`.icm/_shared/github.md` → PR events) —
    the one blocking script call is the only CI read, so no Vercel event churn ever reaches the
    session.
-5. **Respect gates — never auto-advance.** The three hard gates: the scope reviewed (Scope pushes
-   `scope.md` and the intake batch to `main` and stops; the human reads them there and runs `new`
-   when happy), **Spec approved** (PR checkbox, the operator ticks), **Ready to merge** (PR
+5. **Respect gates — never auto-advance.** The three hard gates: the scope reviewed (Scope lands
+   `scope.md` and the intake batch on the ticket base branch through one ticket PR it merges at
+   once, and stops; the human reads them there and runs `new` when happy), **Spec approved** (PR checkbox, the operator ticks), **Ready to merge** (PR
    checkbox, the operator ticks — it attests their own smoke-testing of the preview, which is why
    Release re-asks for none of it). The business's involvement ends when the scope is settled at
    Scope. You only ever **read** the checkboxes (`.icm/_shared/github.md`) — never tick one, and
@@ -328,7 +328,7 @@ The contract is `.icm/uat/CONTEXT.md`; the verbs are `.icm/scripts/promote-uat.s
   uat status          the batch on the UAT branch, the address, the sign-off state, main vs uat
   uat approve "<who>" the operator records the client's sign-off → the promotion PR opens READY
                       into main (you never merge it; the operator does, then `uat sync`)
-  uat sync            after the promotion merged (or a hotfix): uat takes main, the batch resets
+  uat sync            after the promotion merged, and (required) after a hotfix or knowledge PR
   The pipeline itself (a T line of .icm/MANIFEST, or a canonical .claude/ asset — never edited here):
   a request to change one → a template change request for icm-board: .icm/_shared/template-change.md
                       (the prompt, parked as a found-by: template-change triage stub; the sync brings it back)

@@ -74,11 +74,24 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
      production branch (`main` unless renamed), and `previews: vercel` when the Vercel
      integration should create a database per preview deployment — with a UAT environment
      declared, that same toggle gives the UAT branch a persistent database of its own
-     (`preview/<uat>`, `.icm/uat/CONTEXT.md` → The UAT database). Isolation for a run: `neon`
-     (one Neon branch per run — curl and the key, no psql or docker), `schema` (one Postgres
-     schema per run on the variable `url_env` names), `container` (one local Postgres per run),
-     or `none` for a repo without a database. The ids and names go in `project.json`; the key's
-     value never does."
+     (`preview/<uat>`, `.icm/uat/CONTEXT.md` → The UAT database). For a **MongoDB** cluster
+     (`provider: mongodb`, decision D35) — names only, never a URI: the NAME of the variable
+     holding the cluster URI (`url_env`, `MONGODB_URI` unless you keep another), the variable the
+     app reads its database name from (`mongodb.name_env`, `MONGODB_DATABASE_NAME`), the names of
+     the production and the shared preview databases (`production_name`, `preview_name` — never
+     dropped or reset), the repo's own seed and migrate commands (`seed_command`,
+     `migrate_command`; the migrate command takes `up [<name>] [--single]` and `down <name>
+     [--single]`), the runner's
+     collection if not `migrations`, the cluster's caps (`limits` — 100 databases / 500
+     collections on a shared Atlas tier, 0 for uncapped; `name_bytes` 38 there, 63 on a
+     dedicated M10+ cluster), and `previews: branch` when each
+     preview should read its own `preview_<branch>` (the app derives it; one flag on the Preview
+     target switches it on). Isolation for a run: `neon` (one Neon branch per run — curl and the
+     key, no psql or docker), `database` (one MongoDB database per run, `run_<slug>`, on the
+     repo's cluster — node and its installed driver), `schema` (one Postgres schema per run on
+     the variable `url_env` names), `container` (one local Postgres per run), or `none` for a
+     repo without a database. The ids and names go in `project.json`; the key's and the URI's
+     values never do."
    - "`security.audit_command`: an npm/pnpm/yarn lockfile is audited automatically — another
      ecosystem needs its command (pip-audit, cargo audit), or leave it empty."
    - "`support`: `none`, `basic` or `retainer`? Where is the fail-safe page? Which variable
@@ -112,6 +125,13 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
    owed under `_shared/project-rules.md` → The factory → The environments' databases. Never
    create a Neon branch, flip the toggle or set a build command from here: `db-env.sh` reads and
    lists, and its two writes (`reset-uat`, `prune`) run only on `--apply` from the operator.
+   **When a MongoDB cluster was declared**, run `.icm/scripts/db-env.sh init` the same way: it
+   lists the database user's rights, the caps, and — with `previews: branch` — Vercel's system
+   variables, the app's one connection line (`.icm/scripts/lib/db-name.mjs`), the preview-migrate
+   workflow and the smoke check waiting on it, the reference `mongodb-cleanup.yaml`
+   (`setup.sh --fix --template <path>` seeds it), and last the flag
+   `MONGODB_PREVIEW_PER_BRANCH=1` on the Preview target. The app change is a chore run in the
+   repo, not an edit from here; the flag is the operator's to set, and unsetting it is the revert.
 
 5. **Re-run `setup.sh` until `RESULT: OK`** or until every remaining line is a named decision
    the operator took (recorded in `project-rules.md`). `setup.sh --report` must print the same

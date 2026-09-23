@@ -74,6 +74,22 @@
 #                   UAT git branch's database is then `preview/<uat.branch>`), uat_branch — an
 #                   explicit override of that name, normally empty}. lib/neon.sh, db-branch.sh,
 #                   db-env.sh, setup.sh, env-check.sh and the neon-cleanup workflow read it.
+#                   `provider` "mongodb" (D35) — every pipeline database on the ONE cluster the
+#                   repo already uses: `url_env` then defaults to MONGODB_URI (the cluster URI,
+#                   never a database); `isolation` "database" gives each run `run_<slug>` on it;
+#                   `mongodb` {name_env — the variable the app reads its database NAME from
+#                   (default MONGODB_DATABASE_NAME), production_name and preview_name — the two
+#                   long-lived databases, never dropped or reset by anything, seed_command and
+#                   migrate_command — the repo's own (the template never designs seeding; the
+#                   migrate command takes `up [<name>]` and `down <name>`), migrations_collection
+#                   — where the runner records applied migrations (default migrations), previews
+#                   "none" (default) | "branch" (the app derives `preview_<branch>` at runtime
+#                   behind MONGODB_PREVIEW_PER_BRANCH=1 — lib/db-name.mjs), limits {databases,
+#                   collections} — the cluster's caps (default 100 and 500, the shared Atlas
+#                   tiers'; 0 = uncapped) and name_bytes — the longest database name it takes
+#                   (default 38, the shared Atlas tiers'; 63 on a dedicated cluster; read by
+#                   lib/db-name.mjs itself)}. Names only; lib/mongo.mjs, db-branch.sh, db-env.sh,
+#                   setup.sh, env-check.sh and the mongodb-cleanup workflow read it.
 #   security        object {audit_command} — security-check.sh's dependency audit for an
 #                   ecosystem it does not detect itself (npm/pnpm/yarn lockfiles are detected):
 #                   a shell command that exits non-zero on a high/critical finding, e.g.
@@ -124,7 +140,15 @@
 #                                         `false` is false (jq's `//` would read it as absent).
 #   database_url_env · database_isolation · database_image · database_name
 #                                         the database block's scalars with their defaults.
-#   database_provider                     none | neon.
+#   database_provider                     none | neon | mongodb.
+#   mongo_name_env · mongo_production_name · mongo_preview_name · mongo_seed_command
+#   mongo_migrate_command · mongo_migrations_collection · mongo_previews
+#   mongo_limit_databases · mongo_limit_collections
+#                                         the mongodb block's scalars with their defaults
+#                                         (MONGODB_DATABASE_NAME · '' · '' · '' · '' · migrations
+#                                         · none · 100 · 500).
+#   mongo_uat_database                    preview_<uat.branch> (normalised by lib/db-name.mjs)
+#                                         when uat is declared and previews is branch, else ''.
 #   neon_project_id · neon_api_key_env · neon_production_branch · neon_previews
 #                                         the neon block's scalars with their defaults ('' · NEON_API_KEY
 #                                         · main · none).
@@ -249,16 +273,19 @@ migrations_out_of_order() {
 
 # --- database ----------------------------------------------------------------------------------------
 
-database_url_env()   { project_field '.database.url_env' 'DATABASE_URL'; }
+database_url_env() {
+  if [ "$(database_provider)" = mongodb ]; then project_field '.database.url_env' 'MONGODB_URI'
+  else project_field '.database.url_env' 'DATABASE_URL'; fi
+}
 database_isolation() {
   local v; v="$(project_field '.database.isolation' 'none')"
-  case "$v" in schema|container|neon) echo "$v" ;; *) echo none ;; esac
+  case "$v" in schema|container|neon|database) echo "$v" ;; *) echo none ;; esac
 }
 database_image()     { project_field '.database.image' 'postgres:16'; }
 database_name()      { project_field '.database.name' 'app'; }
 database_provider() {
   local v; v="$(project_field '.database.provider' '')"
-  case "$v" in neon) echo neon ;; *) echo none ;; esac
+  case "$v" in neon|mongodb) echo "$v" ;; *) echo none ;; esac
 }
 
 # --- database: the Neon block (D32) ------------------------------------------------------------------
@@ -277,6 +304,38 @@ neon_uat_branch() {
   if [ -n "$v" ]; then printf '%s' "$v"
   elif uat_declared && [ "$(neon_previews)" = "vercel" ]; then printf 'preview/%s' "$(uat_branch)"
   fi
+}
+
+# --- database: the MongoDB block (D35) ---------------------------------------------------------------
+# Names and commands only: the cluster URI stays in the variable url_env names. The two long-lived
+# databases are read so every drop can refuse them by name.
+
+mongo_name_env()              { project_field '.database.mongodb.name_env' 'MONGODB_DATABASE_NAME'; }
+mongo_production_name()       { project_field '.database.mongodb.production_name' ''; }
+mongo_preview_name()          { project_field '.database.mongodb.preview_name' ''; }
+mongo_seed_command()          { project_field '.database.mongodb.seed_command' ''; }
+mongo_migrate_command()       { project_field '.database.mongodb.migrate_command' ''; }
+mongo_migrations_collection() { project_field '.database.mongodb.migrations_collection' 'migrations'; }
+mongo_previews() {
+  local v; v="$(project_field '.database.mongodb.previews' 'none')"
+  case "$v" in branch) echo branch ;; *) echo none ;; esac
+}
+mongo_limit_databases() {
+  local v; v="$(project_field '.database.mongodb.limits.databases' '100')"
+  case "$v" in ''|*[!0-9]*) echo 100 ;; *) echo "$v" ;; esac
+}
+mongo_limit_collections() {
+  local v; v="$(project_field '.database.mongodb.limits.collections' '500')"
+  case "$v" in ''|*[!0-9]*) echo 500 ;; *) echo "$v" ;; esac
+}
+mongo_limit_name_bytes() {
+  local v; v="$(project_field '.database.mongodb.limits.name_bytes' '38')"
+  case "$v" in ''|*[!0-9]*) echo 38 ;; *) echo "$v" ;; esac
+}
+mongo_uat_database() {
+  { uat_declared && [ "$(mongo_previews)" = branch ]; } || return 0
+  command -v node >/dev/null 2>&1 || return 0
+  node "$(dirname "${BASH_SOURCE[0]}")/db-name.mjs" preview "$(uat_branch)"
 }
 
 # --- security ----------------------------------------------------------------------------------------
