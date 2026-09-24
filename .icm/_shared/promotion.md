@@ -117,23 +117,37 @@ With one branch, promoting a SHA promotes everything before it. So the rule move
 Nothing about the gates changes: **Spec approved** and **Ready to merge** are the operator's
 ticks, and the merge rests on a settled `GREEN`.
 
-## The UAT database (D39 (3))
+## The UAT database (D41)
 
-A **named** database, declared by `/setup` and never derived from a git branch:
+Declared by `/setup`, never derived from a git branch — and never a branch of production's:
 
-- **Neon** — `database.neon.uat_branch` (`uat` by convention): a persistent child of the
-  production branch the **operator** creates, its connection strings set on the custom
-  environment's variables (`vercel env add <NAME> <target>`). The Neon integration is **not**
-  connected to the custom environment (it would branch per deployment). The UAT build migrates
-  it like a preview's; `db-env.sh reset-uat --apply` resets it from production on the operator's
-  call (the next UAT deployment re-applies `main`'s unreleased migrations). Run branches
-  (`run/<slug>`) are children of production, never of UAT, so a reset is never blocked.
+- **Neon — a second Marketplace database.** Two Neon projects per UAT repo, both declared in
+  `database.neon`: `project_id` is **production's** database, connected to **Production only**
+  (preview branching off); `nonprod_project_id` is the second one (`uat-<repo>`, Vercel →
+  Storage → Create Database → Neon), connected to the custom environment **and Preview** (+
+  Development) with preview branching on. **UAT is its default branch**; PR previews get
+  `preview/<git-branch>` inside it; run branches (`run/<slug>`) are its children too. Every
+  database variable is the integration's — no hand-set strings, no `UAT_*` names, no code
+  change. Why two: a custom environment is preview-type, so a production database still connected
+  to Preview runs its Preview Deployment Action on every UAT deployment and binds it to
+  production, and one connected to the custom environment hands UAT its Preview secret —
+  production's string again (berceo, 2026-09-24). The UAT build migrates it like a preview's.
+  Nothing non-production ever starts from production's data: `db-env.sh reset-uat --apply` runs
+  the repo's own `database.neon.reset_command` (empty the schema, migrate, seed — `npx prisma
+  migrate reset --force` or the repo's script; it never drops `neon_auth`) against it — there is
+  no parent to reset from. Neon Auth, where the app uses it, is configured once on the second
+  database to match production's. `lib/neon.sh` refuses every write in production's project on a
+  UAT repo; `setup.sh` fails a `database.neon.uat_branch` (the retired named-branch shape), a
+  missing or production-equal `nonprod_project_id`, and — with a Vercel token — a production
+  database variable scoped beyond Production.
 - **MongoDB** — `database.mongodb.uat_name`: the database set as the app's database name on the
   custom environment (with `MONGODB_PREVIEW_PER_BRANCH` unset there), migrated and seeded on each
   merge; `reset-uat --apply` drops it and re-makes it with the repo's migrate and seed commands.
-- **Nothing deletes it.** `lib/neon.sh` and `lib/mongo.mjs` refuse the declared name on every
-  delete (`reset-uat` alone passes `--uat`); the cleanup workflows never reach it; `prune` never
-  lists it. `db-env.sh init` lists the operator's acts; `status` reads it.
+  D41 does not reach it: a MongoDB cluster has no Marketplace override path, so D35–D37 stand.
+- **Nothing deletes it.** On Neon it is a project's default branch, which `lib/neon.sh` never
+  deletes and the cleanup workflow never selects; `lib/mongo.mjs` refuses the declared MongoDB name
+  on every delete (`reset-uat` alone passes `--uat`); `prune` never lists it. `db-env.sh init`
+  lists the operator's acts; `status` reads both projects.
 
 ## The operator's acts — once, before the first merge that relies on them
 

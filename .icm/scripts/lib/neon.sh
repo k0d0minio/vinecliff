@@ -6,24 +6,38 @@
 # lib/project.sh). Every Neon call a template-owned script makes — db-branch.sh's `neon` isolation,
 # db-env.sh, setup.sh's one read of the project — goes through here (decision D32).
 #
-# Unlike lib/vercel.sh this file DOES carry write verbs — create, delete and reset a branch —
-# because a Neon branch is a run's or an environment's working copy, never production, and every
-# write here is scoped to a name the pipeline gave: `run/<slug>` (db-branch.sh), `preview/<git
-# branch>` (the Vercel integration's own naming) or the UAT branch (`_shared/promotion.md`). The
-# project's default (production) branch is never written, deleted or reset by anything in this
-# file, whatever a caller asks; the UAT branch is never deleted; a name outside those shapes is
-# refused before any request is made.
+# Unlike lib/vercel.sh this file DOES carry write verbs — create and delete a branch — because a
+# Neon branch is a run's or a preview's working copy, never production, and every write here is
+# scoped to a name the pipeline gave: `run/<slug>` (db-branch.sh) or `preview/<git branch>` (the
+# Vercel integration's own naming). A project's default branch is never written or deleted by
+# anything in this file, whatever a caller asks; a name outside those shapes is refused before any
+# request is made.
 #
-# Nothing outside the repo is read: no registry, no icm-board, no `~/Apps`. The project id comes
+# Two projects where the repo declares UAT (D41): production's (`database.neon.project_id` — read,
+# never written) and the non-production one (`database.neon.nonprod_project_id` — the second
+# Marketplace database: its default branch IS the UAT database, previews and runs are its
+# children). Every call works on `neon_project`, which is the non-production project; a reader
+# that needs production's switches with `neon_use_project "$neon_prod_project"`, and every write
+# verb refuses while `neon_project` is production's on such a repo. Without UAT the two are the one
+# project, exactly as before.
+#
+# Nothing outside the repo is read: no registry, no icm-board, no `~/Apps`. The project ids come
 # from the database block; the key's VALUE comes from the process environment and never reaches
 # argv (curl reads its configuration from stdin) or stdout.
 #
 # Contract for callers (source after die() is defined and lib/project.sh is sourced):
 #   source "$(dirname "${BASH_SOURCE[0]}")/lib/neon.sh"
-#     → sets NEON_API (default https://console.neon.tech/api/v2), neon_project
-#       (database.neon.project_id), neon_key_name (database.neon.api_key_env) and neon_key (its
-#       value, or empty). Nothing is fetched at source time.
-#   neon_declared                    returns 0 when database.provider is neon and a project_id is set.
+#     → sets NEON_API (default https://console.neon.tech/api/v2), neon_prod_project
+#       (database.neon.project_id — production's), neon_project (the project every call works on:
+#       neon_nonprod_project_id — the non-production project with UAT, production's without),
+#       neon_key_name (database.neon.api_key_env) and neon_key (its value, or empty). Nothing is
+#       fetched at source time.
+#   neon_declared                    returns 0 when database.provider is neon and both ids resolve
+#                                    (with UAT: project_id AND nonprod_project_id).
+#   neon_undeclared_why              the D41 gap in one line (uat declared, nonprod_project_id
+#                                    empty), else nothing — the caller words the plain gap.
+#   neon_use_project <id>            point every call (and the branch cache) at another project —
+#                                    a reader's switch to production's; writes still refuse it.
 #   neon_ready                       returns 0 when declared AND curl, jq and the key are present —
 #                                    the "can call" test; a script answers SKIP otherwise.
 #   neon_require "<why>"             die NOW when not ready — before any side effect.
@@ -37,7 +51,8 @@
 #                                    failure can stop the script, and read the cache afterwards.
 #   neon_branch <name>               one branch's JSON by exact name, or nothing (from the cache).
 #   neon_branch_id <name>            its id, or nothing.
-#   neon_default_branch_id           the id of the project's default (production) branch.
+#   neon_default_branch_id           the id of the project's default branch (production's — or, in
+#                                    the non-production project, the UAT database).
 #   neon_branch_state <id>           the branch's current_state (init|ready|…) — a live GET.
 #   neon_branch_children <id>        the ids of the branches whose parent_id is <id>, one per line.
 #   neon_connection_uri <branch_id> [--unpooled]
@@ -46,16 +61,15 @@
 #                                    ONCE, to stdout, for an eval; never logged, never written.
 #   neon_create_branch <name> <parent_id> [<expires_at>]
 #                                    POST a branch with a read_write compute → the new branch's id.
-#                                    Refuses a name that is not run/*.
-#   neon_delete_branch <id> <name>   DELETE; refuses a name that is not run/* or preview/*, and the
-#                                    UAT branch under any name.
-#   neon_reset_branch <id> <parent_id> [<name>]
-#                                    POST …/restore with source_branch_id = the parent ("reset from
-#                                    parent"); refuses the default branch.
+#                                    Refuses a name that is not run/*, and production's project on a
+#                                    UAT repo.
+#   neon_delete_branch <id> <name>   DELETE; refuses a name that is not run/* or preview/*, the
+#                                    project's default branch (production's — or, with UAT, the UAT
+#                                    database), and production's project on a UAT repo.
 #   neon_wait_ready <id> [<seconds>] poll until current_state is ready (default 90s); 1 on timeout.
 #   neon_now_plus_days <n>           an RFC 3339 UTC timestamp <n> days from now (GNU or BSD date).
-#   neon_pipeline_name <name>        returns 0 when the pipeline gave this name (run/*, preview/*,
-#                                    the UAT branch) — the only names a write verb accepts.
+#   neon_pipeline_name <name>        returns 0 when the pipeline gave this name (run/*, preview/*) —
+#                                    the only names a write verb accepts.
 #
 # Standalone check:
 #   .icm/scripts/lib/neon.sh --check   GET the project's branches through the same logic;
@@ -69,15 +83,34 @@ _neon_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 declare -F project_field >/dev/null 2>&1 || source "$_neon_here/project.sh"
 
 NEON_API="${NEON_API_URL:-https://console.neon.tech/api/v2}"
-neon_project="$(neon_project_id)"
+neon_prod_project="$(neon_project_id)"
+neon_project="$(neon_nonprod_project_id)"
 neon_key_name="$(neon_api_key_env)"
 neon_key="${!neon_key_name:-}"
 
-neon_declared() { [ "$(database_provider)" = "neon" ] && [ -n "$neon_project" ]; }
+neon_declared() { [ "$(database_provider)" = "neon" ] && [ -n "$neon_prod_project" ] && [ -n "$neon_project" ]; }
 neon_ready()    { neon_declared && [ -n "$neon_key" ] && command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; }
+neon_undeclared_why() { # prints nothing when the only gap is the one every script already words
+  if [ "$(database_provider)" = "neon" ] && [ -n "$neon_prod_project" ] && neon_split; then
+    echo "uat is declared but database.neon.nonprod_project_id is empty — UAT, previews and runs live in the second Marketplace database's Neon project, never production's (D41); /setup asks for it"
+  fi
+}
+neon_use_project() { neon_project="$1"; NEON_BRANCHES=""; }
+
+# The one write guard (D41): on a UAT repo nothing the pipeline writes lands in production's project.
+_neon_write_guard() { # <what>
+  [ -n "$neon_project" ] || die "refusing to $1 — no Neon project to write in"
+  if neon_split && [ "$neon_project" = "$neon_prod_project" ]; then
+    die "refusing to $1 in Neon project $neon_project — it is production's (database.neon.project_id); on a UAT repo every pipeline write goes to the non-production project (database.neon.nonprod_project_id, D41)"
+  fi
+  return 0
+}
 
 neon_require() { # <why>
-  neon_declared || die "no Neon project in .icm/project.json (database.provider: neon + database.neon.project_id) before ${1:-this call} — /setup asks for it"
+  if ! neon_declared; then
+    [ -z "$(neon_undeclared_why)" ] || die "$(neon_undeclared_why) — needed before ${1:-this call}"
+    die "no Neon project in .icm/project.json (database.provider: neon + database.neon.project_id) before ${1:-this call} — /setup asks for it"
+  fi
   command -v curl >/dev/null 2>&1 || die "curl not found"
   command -v jq   >/dev/null 2>&1 || die "jq not found"
   [ -n "$neon_key" ] || die "no Neon API key in this environment for ${1:-this call}: set ${neon_key_name} (the name database.neon.api_key_env names); never pass it as an argument"
@@ -124,8 +157,6 @@ neon_branch_state() {
 
 neon_pipeline_name() { # <name>
   case "$1" in run/*|preview/*) return 0 ;; esac
-  local u; u="$(neon_uat_branch)"
-  [ -n "$u" ] && [ "$1" = "$u" ] && return 0
   return 1
 }
 
@@ -147,6 +178,7 @@ neon_create_branch() { # <name> <parent_id> [<expires_at>]
   local name="$1" parent="$2" expires="${3:-}" body resp
   case "$name" in run/*) : ;; *) die "refusing to create Neon branch '$name' — the pipeline creates run/<slug> branches here and nothing else (the integration creates preview/*; production is never created here)" ;; esac
   [ -n "$parent" ] || die "neon_create_branch: no parent id"
+  _neon_write_guard "create branch $name"
   body="$(jq -cn --arg n "$name" --arg p "$parent" --arg e "$expires" \
     '{branch: ({name: $n, parent_id: $p} + (if $e == "" then {} else {expires_at: $e} end)), endpoints: [{type: "read_write"}]}')"
   resp="$(neon_api POST "/projects/${neon_project}/branches" "$body")" || die "could not create branch $name"
@@ -157,20 +189,11 @@ neon_create_branch() { # <name> <parent_id> [<expires_at>]
 neon_delete_branch() { # <id> <name>
   local id="$1" name="$2" resp
   case "$name" in run/*|preview/*) : ;; *) die "refusing to delete Neon branch '$name' — only run/* and preview/* branches are the pipeline's to delete" ;; esac
+  _neon_write_guard "delete branch $name"
   [ -n "$NEON_BRANCHES" ] || neon_load_branches || die "could not read the project's branches before deleting $name — nothing deleted"
-  [ "$name" != "$(neon_uat_branch)" ] || die "refusing to delete the UAT branch '$name' (_shared/promotion.md → The UAT database)"
-  [ "$id" != "$(neon_default_branch_id)" ] || die "refusing to delete the default (production) branch"
+  [ "$id" != "$(neon_default_branch_id)" ] || die "refusing to delete the project's default branch (production's — or, on a UAT repo, the UAT database)"
   resp="$(neon_api DELETE "/projects/${neon_project}/branches/${id}")" || die "could not delete branch $name"
   neon_ok "$resp" || die "DELETE …/branches/$id ($name) answered HTTP $(neon_code "$resp"): $(neon_err "$resp")"
-}
-
-neon_reset_branch() { # <id> <parent_id> [<name>]
-  local id="$1" parent="$2" name="${3:-$1}" resp
-  [ -n "$NEON_BRANCHES" ] || neon_load_branches || die "could not read the project's branches before resetting $name — nothing reset"
-  [ "$id" != "$(neon_default_branch_id)" ] || die "refusing to reset the default (production) branch"
-  [ -n "$parent" ] || die "neon_reset_branch: no parent id"
-  resp="$(neon_api POST "/projects/${neon_project}/branches/${id}/restore" "$(jq -cn --arg p "$parent" '{source_branch_id: $p}')")" || die "could not reset branch $name"
-  neon_ok "$resp" || die "POST …/branches/$id/restore ($name) answered HTTP $(neon_code "$resp"): $(neon_err "$resp")"
 }
 
 neon_wait_ready() { # <id> [<seconds>]
@@ -191,12 +214,18 @@ neon_now_plus_days() { # <n>
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   case "${1:-}" in
     --check)
-      if ! neon_declared; then echo "no Neon project declared in .icm/project.json (database.provider: neon, database.neon.project_id) — nothing to check"; echo "RESULT: SKIP"; exit 0; fi
+      if ! neon_declared; then echo "$(neon_undeclared_why | grep . || echo "no Neon project declared in .icm/project.json (database.provider: neon, database.neon.project_id)") — nothing to check"; echo "RESULT: SKIP"; exit 0; fi
       if [ -z "$neon_key" ]; then echo "${neon_key_name} unset in this environment — the project ${neon_project} is declared, the route is not (export it; never in git)"; echo "RESULT: SKIP"; exit 0; fi
       neon_require "--check"
+      if neon_split; then
+        np="$neon_project"; neon_use_project "$neon_prod_project"
+        neon_load_branches || exit 1
+        echo "Neon project ${neon_project} (production): $(printf '%s' "$NEON_BRANCHES" | jq 'length') branch(es), read via ${neon_key_name}"
+        neon_use_project "$np"
+      fi
       neon_load_branches || exit 1
       n="$(printf '%s' "$NEON_BRANCHES" | jq 'length')"
-      echo "Neon project ${neon_project}: ${n} branch(es), read via ${neon_key_name}"
+      echo "Neon project ${neon_project}$(neon_split && echo " (non-production)"): ${n} branch(es), read via ${neon_key_name}"
       echo "RESULT: OK"; exit 0 ;;
     *) echo "usage: lib/neon.sh --check   (otherwise: source it)" >&2; exit 2 ;;
   esac

@@ -127,6 +127,7 @@ if [ -f ".icm/project.json" ]; then
     esac
     if [ "$(jq -r '.database.provider // empty' .icm/project.json)" = "neon" ]; then
       if [ -z "$(jq -r '.database.neon.project_id // empty' .icm/project.json)" ]; then warn "database.provider is neon but database.neon.project_id is empty — db-env.sh and the cleanup workflow have no project to read"
+      elif jq -e '(.uat.target // "") != "" and (.uat.url // "") != "" and (.database.neon.nonprod_project_id // "") == ""' .icm/project.json >/dev/null; then warn "uat is declared but database.neon.nonprod_project_id is empty — previews, runs and UAT have no project; they never fall back to production's (D41; setup.sh)"
       elif [ -n "${!nk:-}" ]; then ok "Neon project declared and \$$nk set — db-env.sh status reads it"
       else info "Neon project declared; \$$nk unset here — db-env.sh, db-branch.sh (neon) and setup.sh read nothing until it is exported"; fi
     fi

@@ -63,17 +63,24 @@
 #                   (one Postgres schema per run, `run_<slug>`, on the database the variable names),
 #                   "container" (one local Postgres container per run, `icm-db-<slug>`, from
 #                   `image`, default postgres:16, database `name`, default app) or "neon" (one Neon
-#                   branch per run, `run/<slug>`, a child of the production branch with a 7-day
-#                   expiry — needs `provider: neon`, curl and the key; no psql, no docker).
-#                   `provider` "" (the default) or "neon"; `neon` {project_id — the Neon project
-#                   (not a secret; a Vercel-managed database shows it under Storage → Open in
-#                   Neon), api_key_env — the NAME of the variable holding a Neon API key (default
-#                   NEON_API_KEY), production_branch (default main — never written by a script),
-#                   previews "none" (default) | "vercel" (the Vercel integration creates
+#                   branch per run, `run/<slug>`, a child of the production branch — with uat, of
+#                   the non-production project's default branch (D41) — with a 7-day expiry —
+#                   needs `provider: neon`, curl and the key; no psql, no docker).
+#                   `provider` "" (the default) or "neon"; `neon` {project_id — PRODUCTION's Neon
+#                   project (not a secret; a Vercel-managed database shows it under Storage → Open
+#                   in Neon), nonprod_project_id — where uat is declared, the Neon project of the
+#                   SECOND Marketplace database (D41: `uat-<repo>`, connected to the UAT
+#                   environment + Preview): UAT is its default branch, previews and runs live in it,
+#                   and nothing in the pipeline writes production's project; without uat it is
+#                   ignored and the one project serves previews and runs, as before. api_key_env —
+#                   the NAME of the variable holding a Neon API key that reaches both projects
+#                   (default NEON_API_KEY), production_branch (default main — never written by a
+#                   script), previews "none" (default) | "vercel" (the Vercel integration creates
 #                   `preview/<git-branch>` per preview deployment and injects its variables),
-#                   uat_branch — the NAMED Neon branch behind the UAT environment (D39 (3)): a
-#                   persistent child of production the operator creates, its connection set on
-#                   the custom environment's variables; required when uat is declared}.
+#                   reset_command — the repo's own command that empties the UAT database and
+#                   re-migrates and re-seeds it, run by `db-env.sh reset-uat --apply` with url_env
+#                   pointed at it (there is no parent to reset from — D41 (3)); empty means no
+#                   reset. A `uat_branch` key is the retired D39 (3) shape: setup.sh fails it}.
 #                   lib/neon.sh, db-branch.sh, db-env.sh, setup.sh, env-check.sh and the
 #                   neon-cleanup workflow read it.
 #                   `provider` "mongodb" (D35) — every pipeline database on the ONE cluster the
@@ -153,11 +160,15 @@
 #                                         (MONGODB_DATABASE_NAME · '' · '' · '' · '' · migrations
 #                                         · none · 100 · 500).
 #   mongo_uat_database                    database.mongodb.uat_name when uat is declared, else ''.
-#   neon_project_id · neon_api_key_env · neon_production_branch · neon_previews
+#   neon_project_id · neon_api_key_env · neon_production_branch · neon_previews · neon_reset_command
 #                                         the neon block's scalars with their defaults ('' · NEON_API_KEY
-#                                         · main · none).
-#   neon_uat_branch                       database.neon.uat_branch when uat is declared, else ''
-#                                         (no UAT database). Never derived from a git branch.
+#                                         · main · none · ''). neon_project_id is PRODUCTION's project.
+#   neon_nonprod_project_id               where previews, runs and (with uat) the UAT database live:
+#                                         database.neon.nonprod_project_id when uat is declared ('' when
+#                                         it is missing — never production's by default), else
+#                                         neon_project_id (one project, as before D41).
+#   neon_split                            returns 0 when uat is declared — the repo has two Neon
+#                                         projects and production's is read, never written (D41).
 #   security_audit_command                the audit override, or nothing.
 #   support_tier · support_failsafe · support_sentry_env
 #                                         the support block's scalars with their defaults.
@@ -288,8 +299,8 @@ database_provider() {
   case "$v" in neon|mongodb) echo "$v" ;; *) echo none ;; esac
 }
 
-# --- database: the Neon block (D32) ------------------------------------------------------------------
-# Names only: the project id (not a secret) and the NAME of the key's variable. The production
+# --- database: the Neon block (D32, D41) -------------------------------------------------------------
+# Names only: the project ids (not secrets) and the NAME of the key's variable. The production
 # branch is read so no script ever has to guess it; nothing in the pipeline writes it.
 
 neon_project_id()        { project_field '.database.neon.project_id' ''; }
@@ -299,9 +310,14 @@ neon_previews() {
   local v; v="$(project_field '.database.neon.previews' 'none')"
   case "$v" in vercel) echo vercel ;; *) echo none ;; esac
 }
-neon_uat_branch() {
-  uat_declared || return 0
-  project_field '.database.neon.uat_branch' ''
+neon_reset_command()     { project_field '.database.neon.reset_command' ''; }
+# D41: with UAT, production's project and the non-production one (UAT, previews, runs) are two
+# declared ids; without UAT they are one. A missing non-production id reads as '' — a caller then
+# has no project to write, rather than falling back to production's.
+neon_split() { uat_declared; }
+neon_nonprod_project_id() {
+  if neon_split; then project_field '.database.neon.nonprod_project_id' ''
+  else neon_project_id; fi
 }
 
 # --- database: the MongoDB block (D35) ---------------------------------------------------------------

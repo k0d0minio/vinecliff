@@ -170,7 +170,8 @@ required: the merge never waits for a deployment, so a repo without them only pa
 
 **Where the repo declares UAT, every push to `main` builds twice** (`.icm/project.json` → `uat`;
 `_shared/promotion.md`; D39): once for the Vercel custom environment `uat.target` — its own
-variables, its own database, the domain `uat.url` always serving its newest READY deployment,
+variables, its own database (the second Marketplace database's default branch on a Neon repo —
+D41), the domain `uat.url` always serving its newest READY deployment,
 which keeps the client's address constant while the batch under it changes — and once for
 production, held **Staged** (Auto-assign Custom Production Domains off) until the release workflow
 promotes it on a published Release. Neither is a PR preview and neither carries a PR status:
