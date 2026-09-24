@@ -167,9 +167,24 @@ case "$verb" in
     rules_md=".icm/_shared/project-rules.md"
     [ -f "$failure" ] || { echo "no $failure — nothing to sync"; echo "RESULT: SYNCED 0"; exit 0; }
     [ -f "$rules_md" ] || { echo "no $rules_md (project-owned; seeded by icm-check.sh --fix) — nothing to sync into"; echo "RESULT: SYNCED 0"; exit 0; }
+    # A bullet is read whole — its `- ` line plus every indented continuation line up to the next
+    # bullet, blank line or heading — and joined into one line, continuation whitespace collapsed to
+    # one space, so a rule that wrapped in FAILURE.md never lands in project-rules.md cut mid-sentence.
     # Only real bullets: the template's own "<one sentence, …>" placeholder is not a rule.
-    mapfile -t rules < <(section_body "$failure" 'Learned rules' | grep -E '^- ' | sed -E 's/^- //' | grep -vE '^<.*>$' | grep -v '^$' || true)
+    join_bullets() { # stdin: markdown → stdout: one line per `- ` bullet, the leading `- ` stripped
+      awk '
+        function flush() { if (cur != "") print cur; cur = "" }
+        /^- / { flush(); cur = substr($0, 3); sub(/[[:space:]]+$/, "", cur); next }
+        cur != "" && /^[[:space:]]+[^[:space:]]/ { s = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); cur = cur " " s; next }
+        { flush() }
+        END { flush() }'
+    }
+    mapfile -t rules < <(section_body "$failure" 'Learned rules' | join_bullets | grep -vE '^<.*>$' | grep -v '^$' || true)
     if [ "${#rules[@]}" -eq 0 ]; then echo "FAILURE.md has no learned rules — nothing to sync"; echo "RESULT: SYNCED 0"; exit 0; fi
+    # `known` is judged on the same joined view of project-rules.md: a formatter may have wrapped a
+    # rule there since it was appended, and a wrapped rule is still the same rule.
+    mapfile -t known < <(join_bullets < "$rules_md")
+    is_known() { local k; for k in "${known[@]}"; do [[ "$k" == "$1 ("* || "$k" == "$1" ]] && return 0; done; return 1; }
     stamp="$(date -u +%F)"; added=0
     if ! grep -q '^## Learned rules' "$rules_md"; then
       if [ "$dry_run" -eq 0 ]; then
@@ -180,7 +195,7 @@ case "$verb" in
     # The same shape retrospective.sh appends in (its header documents it): a provenance stamp,
     # then the rule with its source in the trailing parenthesis — one section, two writers, one look.
     for r in "${rules[@]}"; do
-      if grep -qF -- "- $r (" "$rules_md" || grep -qxF -- "- $r" "$rules_md"; then echo "  known    $r"; continue; fi
+      if is_known "$r"; then echo "  known    $r"; continue; fi
       if [ "$dry_run" -eq 1 ]; then echo "  [dry-run] would add: $r"; else
         # Append at the end of the file: the section is the file's last, by construction and by
         # retrospective.sh's own rule; `## Learned rules` elsewhere is honoured the same way it does.

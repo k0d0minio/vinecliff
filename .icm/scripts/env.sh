@@ -47,9 +47,14 @@
 #                         placeholders and `[targets]` from Vercel's own scoping. Never overwrites,
 #                         reorders or writes a value.  RESULT: SEEDED n | UNCHANGED
 #   pull [--target t]     `vercel env pull` per project path into .env.local, the notes from
-#                         .env.example interleaved above the keys; refuses BEFORE the pull when
-#                         .env.local is not gitignored; restores the .gitignore line the CLI
-#                         appends. A sensitive key cannot be read back: it is written as `KEY=`
+#                         .env.example interleaved above the keys. Links the directory first —
+#                         `vercel link --yes --project <name>`, the name the deploy block declares
+#                         and never the folder's, so `--yes` can never create a project — when
+#                         `.vercel/project.json` is absent (a fresh cloud checkout) or names another
+#                         project; a link that writes no usable link file is that project's FAILED
+#                         line and the rest carry on. Refuses BEFORE the pull when .env.local is
+#                         not gitignored; restores the .gitignore line the CLI appends (link and
+#                         pull both), on the failed paths too. A sensitive key cannot be read back: it is written as `KEY=`
 #                         under its note with one `# sensitive — paste locally` line. Default
 #                         target: development (the cloud hydrate hook passes production).
 #                         RESULT: PULLED n | REFUSED | SKIP (vercel CLI not found)
@@ -322,6 +327,15 @@ cmd_init() {
 
 # --- pull -------------------------------------------------------------------------------------------------
 
+# The CLI appends `.env*` to the .gitignore of the directory it runs in, unprompted — `vercel link`
+# and `vercel env pull` both — which hides the .env.example this script treats as the manifest. Held
+# across both calls and put back on every path out of the loop, the failed ones included.
+restore_gitignore() { # <gitignore-path> <existed 0|1> <content-before>
+  if [ "$2" -eq 1 ]; then
+    [ "$(cat "$1" 2>/dev/null)" = "$3" ] || { printf '%s\n' "$3" > "$1"; echo "  restored $1 (the CLI had appended to it)"; }
+  elif [ -f "$1" ]; then rm -f "$1"; echo "  removed $1 (the CLI had created it)"; fi
+}
+
 cmd_pull() {
   local target="development"
   while [ $# -gt 0 ]; do case "$1" in --target) target="${2:-}"; shift 2 ;; *) die "pull: unknown flag $1" ;; esac; done
@@ -334,12 +348,30 @@ cmd_pull() {
     IFS='|' read -r name path file <<<"$m"
     local dir="${path%/.}"; dir="${dir:-.}"; local envlocal="$dir/.env.local"; envlocal="${envlocal#./}"
     if ! git check-ignore -q "$envlocal" 2>/dev/null; then echo "  REFUSED $name: $envlocal is not gitignored — a pulled file would carry live values into a tracked-visible tree; add it to .gitignore first"; refused=$((refused+1)); continue; fi
-    local gi="$dir/.gitignore"; local gi_before=""; [ -f "$gi" ] && gi_before="$(cat "$gi")"
-    if ! ( cd "$dir" && VERCEL_TOKEN="$vercel_token" vercel env pull .env.local --environment "$target" --yes ${team:+--scope "$team"} >/dev/null 2>&1 ); then
-      echo "  FAILED $name: vercel env pull did not write $envlocal (is the directory linked? vercel link --project $name${team:+ --scope $team})"; refused=$((refused+1)); continue
+    local gi="$dir/.gitignore" gi_before="" gi_existed=0; [ -f "$gi" ] && { gi_existed=1; gi_before="$(cat "$gi")"; }
+    # Link before the pull, to the project the deploy block NAMES — never the folder name, so `--yes`
+    # can never create a project (the hydrate hook's rule). A fresh checkout has no `.vercel/`; a
+    # stale link to another project is re-linked the same way. The link file carries only ids.
+    local link="$dir/.vercel/project.json"; link="${link#./}"
+    local linked=""; [ -f "$link" ] && linked="$(jq -r '.projectName // empty' "$link" 2>/dev/null)"
+    if [ "$linked" != "$name" ]; then
+      ( cd "$dir" && VERCEL_TOKEN="$vercel_token" vercel link --yes --project "$name" ${team:+--scope "$team"} </dev/null >/dev/null 2>&1 ) || true
+      # Trust, then check: the CLI has been seen to report success and write no link at all (a
+      # `.vercel/repo.json` above the directory puts it in repo-link mode), and the pull would then
+      # have nothing to read.
+      linked=""; [ -f "$link" ] && linked="$(jq -r '.projectName // empty' "$link" 2>/dev/null)"
+      if [ "$linked" != "$name" ]; then
+        restore_gitignore "$gi" "$gi_existed" "$gi_before"
+        echo "  FAILED $name: vercel link --project $name${team:+ --scope $team} wrote no usable $link (a .vercel/repo.json above the directory puts the CLI in repo-link mode; or the token cannot see the project)"; refused=$((refused+1)); continue
+      fi
+      echo "  linked  $name → $link${team:+ ($team)}"
+      git check-ignore -q "$link" 2>/dev/null || echo "  note    ${link%/project.json} is not gitignored here — ids only, but it does not belong in the tree"
     fi
-    # The CLI appends `.env*` to .gitignore unprompted, which hides .env.example — put it back.
-    if [ -f "$gi" ] && [ "$(cat "$gi")" != "$gi_before" ]; then printf '%s\n' "$gi_before" > "$gi"; echo "  restored $gi (the CLI had appended to it)"; fi
+    if ! ( cd "$dir" && VERCEL_TOKEN="$vercel_token" vercel env pull .env.local --environment "$target" --yes ${team:+--scope "$team"} </dev/null >/dev/null 2>&1 ); then
+      restore_gitignore "$gi" "$gi_existed" "$gi_before"
+      echo "  FAILED $name: vercel env pull did not write $envlocal ($target, linked to $name${team:+ in $team}) — the token may not read $target for it"; refused=$((refused+1)); continue
+    fi
+    restore_gitignore "$gi" "$gi_existed" "$gi_before"
     # Interleave the notes; write sensitive keys as empty under their note.
     local rows; rows="$(parse_example "$file")"; local kinds; kinds="$(vercel_env_list "$name" 2>/dev/null || true)"
     local tmp; tmp="$(mktemp)"; chmod 600 "$tmp"

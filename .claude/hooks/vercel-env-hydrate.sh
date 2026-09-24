@@ -68,12 +68,19 @@
 # repo that has it and already registered everywhere. Riding the registration it has is
 # one canonical file to fan out instead of two dozen policy edits.
 #
+# Where the repo carries the pipeline's own `.icm/scripts/env.sh` AND declares a deploy block
+# (`.icm/project.json` → deploy.projects), that script owns the pull — one implementation for the
+# local and the cloud flow, one link-then-pull per declared project, by the name the block
+# declares. This hook then only decides whether to pull at all (the same MAX_AGE rule, over every
+# declared project's `.env.local`) and reports what env.sh said: its verdict line, and every
+# project that did not pull, one line each.
+#
 # Panel variables, all optional except the first:
 #   VERCEL_TOKEN         team-scoped token. Absent -> the hook does nothing at all.
 #   VERCEL_PROJECT       project name, when the remote maps to more than one.
 #   VERCEL_ENV_TARGET    production (default) | preview | development.
 #   VERCEL_ENV_HYDRATE   0 to disable.
-#   VERCEL_ENV_MAX_AGE   seconds before a re-hydrate; default 3600, 0 to always pull.
+#   VERCEL_ENV_MAX_AGE   seconds before a re-hydrate; default 3600, 0 to always pull. Both paths.
 
 set -uo pipefail
 
@@ -105,8 +112,31 @@ git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 # "not declared".
 if [[ -x "$ROOT/.icm/scripts/env.sh" ]] && [[ -f "$ROOT/.icm/project.json" ]] \
    && jq -e '(.deploy.projects // []) | length > 0' "$ROOT/.icm/project.json" >/dev/null 2>&1; then
-  out="$("$ROOT/.icm/scripts/env.sh" pull --target "$TARGET" 2>&1 | tail -n1)"
-  say "via .icm/scripts/env.sh pull ($TARGET): ${out:-no output}"
+  # The freshness rule of the path below, ahead of the hand-off: a resume or a compaction re-runs
+  # this hook, and values pulled minutes ago are the same values. Every declared project's
+  # .env.local must be env.sh's own, for this target, and younger than MAX_AGE for the pull to be
+  # skipped — one missing or stale and the whole pull runs (env.sh is per project, and cheap).
+  if (( MAX_AGE > 0 )); then
+    fresh=1; oldest=0; now=$(date +%s)
+    while IFS= read -r p; do
+      p="${p#./}"; p="${p%/}"; [[ "$p" == "." ]] && p=""
+      f="$ROOT/${p:+$p/}.env.local"
+      if [[ -f "$f" && "$(head -n1 "$f" 2>/dev/null)" == "# Written by .icm/scripts/env.sh pull ($TARGET)"* ]]; then
+        age=$(( now - $(stat -c %Y "$f" 2>/dev/null || echo 0) ))
+        if (( age >= 0 && age < MAX_AGE )); then (( age > oldest )) && oldest=$age; continue; fi
+      fi
+      fresh=0; break
+    done < <(jq -r '.deploy.projects[] | .path // "."' "$ROOT/.icm/project.json" 2>/dev/null)
+    if (( fresh )); then
+      say "every declared project's .env.local was pulled by .icm/scripts/env.sh $(( oldest / 60 ))m ago ($TARGET) — left alone."
+      exit 0
+    fi
+  fi
+  out="$("$ROOT/.icm/scripts/env.sh" pull --target "$TARGET" 2>&1)"
+  # The verdict line, then every project that did not pull — one line each, never the last alone.
+  say "via .icm/scripts/env.sh pull ($TARGET): $(printf '%s\n' "$out" | tail -n1)"
+  while IFS= read -r line; do [[ -n "$line" ]] && say "  $line"; done \
+    < <(printf '%s\n' "$out" | grep -E '^[[:space:]]*(FAILED|REFUSED) ' | sed -E 's/^[[:space:]]+//')
   exit 0
 fi
 

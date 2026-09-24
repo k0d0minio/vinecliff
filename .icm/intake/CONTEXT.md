@@ -152,7 +152,9 @@ a `research` stub is a spike, and Define sets the spec's complexity from what th
 
 The order invariants — `sequence` unique and contiguous over the whole batch (`_done/` included),
 `of m` matching the stub count, every `depends-on` naming an in-batch stub sequenced first,
-`## Build order` and the stubs' `sequence:` agreeing — are checked by
+`## Build order` and the stubs' `sequence:` agreeing — and the slug invariant (the scope slug is
+none of the names the board reserves for its pseudo-batches, `runs`, `triage`, `backlog`, nor
+`_done`, the archive) are checked by
 `.icm/scripts/validate-intake.sh <scope-slug>` → `RESULT: OK`. Scope runs it before pushing; a
 repo whose CI re-runs it advisorily on any PR touching `.icm/intake/**` (`_shared/project-rules.md`
 → The factory says whether this one does) is what catches a later hand-edit to `breakdown.md`.

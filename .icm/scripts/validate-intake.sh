@@ -8,9 +8,13 @@
 #   1. every stub carries '- sequence: n of m', unique and contiguous over 1..m;
 #   2. m agrees with how many stubs there actually are;
 #   3. every 'depends-on:' names a stub in the same batch, sequenced BEFORE its dependent;
-#   4. '## Build order' in breakdown.md lists the same slugs, in the same order, as the sequences.
+#   4. '## Build order' in breakdown.md lists the same slugs, in the same order, as the sequences;
+#   5. the scope slug itself is not a name the intake tree or the estate board already owns:
+#      'triage' (the parked one-offs), 'backlog' (legacy flat tickets) and 'runs' (the runs in
+#      flight) are the board's pseudo-batches and '_done' is the archive — an epic cut under one
+#      of them resolves to the pseudo-batch instead of itself, and no board renders it.
 #
-# All four are deterministic, so the agent shouldn't be spending context on them. This script owns
+# All five are deterministic, so the agent shouldn't be spending context on them. This script owns
 # them; the agent owns the judgement the contract also asks for (is each stub independently
 # shippable, does it sit on a real product seam, is anything stub-sized actually scope-sized).
 #
@@ -54,12 +58,32 @@ else
 fi
 [ -d "$dir" ] || die "no intake folder at '$dir' (cut the scope first — .icm/stages/01_scope/CONTEXT.md step 6)"
 
+# --- the scope slug itself (invariant 5) -----------------------------------------------------------
+# `triage batch` and Scope both slugify a title, and nothing else stops the result being a name the
+# board already renders as a pseudo-batch (`runs`, `triage`, `backlog`) or the intake tree already
+# uses (`_done`, the archive). Judged on the folder's own name — the scope slug — never on a stub's
+# feature-slug. `triage/` itself is the backlog below, and is refused only once a breakdown.md says
+# a batch was cut into it.
+
+scope_slug="$(basename "$dir")"
+reserved_slug() { case "$1" in runs|triage|backlog|_done) return 0 ;; *) return 1 ;; esac; }
+reject_reserved() { # <slug> <why>
+  echo "intake invalid: $dir" >&2
+  echo "  ✗ '$1' is a reserved scope slug — $2. Re-cut the batch under another slug (triage batch / Scope's slugify step)" >&2
+  echo "RESULT: INVALID"
+  exit 2
+}
+if [ "$scope_slug" != "triage" ] && reserved_slug "$scope_slug"; then
+  reject_reserved "$scope_slug" "runs, triage and backlog are the board's pseudo-batches and _done is the archive; an epic cut under one of them resolves to the pseudo-batch, never to itself"
+fi
+
 # --- triage/ is a backlog, not a batch -------------------------------------------------------------
 # .icm/intake/triage/ holds parked off-ticket findings (intake/CONTEXT.md → Triage): no breakdown,
 # no sequence, no depends-on. The only invariant is that every stub names the lane that will
 # consume it, so /pipeline bug|tweak|chore can route it.
 
-if [ "$(basename "$dir")" = "triage" ]; then
+if [ "$scope_slug" = "triage" ]; then
+  [ -f "$dir/breakdown.md" ] && reject_reserved "triage" ".icm/intake/triage/ is the parked-findings backlog, never an epic, yet it holds a breakdown.md — a batch was cut into it"
   shopt -s nullglob
   t_problems=(); t_count=0
   for f in "$dir"/*.md "$dir"/_done/*.md; do

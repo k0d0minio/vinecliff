@@ -141,7 +141,8 @@ glossary to follow, rewrite it.
    - **The bookkeeping is a script, not an eyeball:** `.icm/scripts/validate-intake.sh <slug>` →
      `RESULT: OK` before moving on. It owns the order invariants (`sequence` unique and contiguous,
      `of m` matching the stub count, every `depends-on` in-batch and sequenced first, `## Build
-order` agreeing with the stubs). What it cannot judge, you still must: each stub is
+order` agreeing with the stubs) and the slug invariant (the scope slug is not `runs`, `triage`,
+     `backlog` or `_done` — the board's pseudo-batches and the archive). What it cannot judge, you still must: each stub is
      independently shippable, names a persona, carries the initiative/objective link, and sits on a
      real seam; re-cutting the same graph reproduces the same order.
 
