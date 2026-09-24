@@ -162,11 +162,22 @@ order` agreeing with the stubs). What it cannot judge, you still must: each stub
 8. **Stop.** The usage line — `.icm/scripts/usage-snapshot.sh <slug> scope end` — is taken just
    before step 7's commit, so it rides that commit with the rest (it is inside the run folder
    the path guard allows).
-   Return the commit, the `main` links for `story.md`, `scope.md` and `breakdown.md` for
-   the human to review, the stub count and order, and the `## Open for Define` list. The next step,
-   when they are happy, is `/pipeline new`, which walks the batch into Define. A scope they are not
-   happy with is deleted (the run folder and the intake folder, in a direct commit of its own) and
-   Scope is run again from the source — there is no revise path and nothing to patch in place.
+   Report per `.icm/_shared/output.md`:
+
+   ```
+   **scope <slug> landed** — <n> stubs · CI n/a (direct commit to main) · <commit link>
+
+   - <the stubs in build order, one line each>
+   - <the ## Open for Define list, or "nothing open">
+
+   Operator:
+   1. review story.md, scope.md and breakdown.md on main: <the three main links>
+   2. happy → run /pipeline new (walks the batch into Define); not happy → delete the run and intake folders and re-run Scope
+   ```
+
+   A scope they are not happy with is deleted (the run folder and the intake folder, in a direct
+   commit of its own) and Scope is run again from the source — there is no revise path and
+   nothing to patch in place.
 
 On the push the source **freezes**: `_source/story.md` is never edited again, and the canonical
 scope is `scope.md` until Define writes `spec.md`. Any later change to the substance is a visible

@@ -104,6 +104,18 @@ subscribed session wakes for each one.
 Pipeline repos carry this in `.icm/_shared/github.md` and `.icm/_shared/ci.md`,
 gated by `.icm/scripts/ci-status.sh` — read it there rather than here. Each rule lives once.
 
+## What the session says
+
+This is about the **chat** only — PR bodies, stubs and `handoff.md` stay as full as they need to
+be, and a gate checkbox lives in the PR body, never in chat. In chat: valuable information, easy
+to parse. While working, a short line per phase change or notable event (`CI red on lint —
+fixing`) — no narration of tool calls, no pasted files or diffs. At a stop: a bold outcome line
+`<task> <outcome> · CI <verdict> · <PR link>`, 2–5 bullets of what matters (decisions, surprises,
+what was parked), then `Operator:` as a numbered list of human-only acts with where to do them (a gate is
+named with its PR link), then `Unverified:` when anything was. **Never trimmed:** a STOP and its
+reason, a red check, anything skipped or unverified, a plaintext credential found. Pipeline repos
+hold the full doctrine in `.icm/_shared/output.md`.
+
 ## Finishing
 
 - The PR that finishes a stub's work `git mv`s the stub to its epic's (or triage's)

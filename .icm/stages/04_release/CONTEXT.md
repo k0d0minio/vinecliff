@@ -277,7 +277,7 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
    Then the application's own word, once: `.icm/scripts/health-check.sh --sha <merge-sha>` —
    one GET per endpoint the repo declares (`health_endpoint` in `.icm/project.json`, or per
    project under `deploy.projects[]`), expecting 200, three attempts with backoff. It prints the
-   one `- health:` line the stop message takes: `OK`, `SKIP — no health endpoint declared`, or
+   one `- health:` line the stop report takes: `OK`, `SKIP — no health endpoint declared`, or
    `FAIL <endpoint>` — on which it has already called `report.sh alert` (the repo's channels;
    `SKIPPED` where none is mapped) and parked **one triage stub**
    (`.icm/intake/triage/health-check-<date>-<sha>.md`, `lane: bug`, `complexity: high`) that it
@@ -300,14 +300,24 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
    `announce: deferred to CI` and let the repo's release workflow make the same call. **Never
    wait or poll for that workflow.**
 
-   **(c) The record is already merged — say it in the report instead.** The `- production:` and
-   `- health:` lines and the announce outcome go in your stop message (the record on `main`
-   cannot take a post-merge line without a second PR, and there is no second PR). Then tell the
-   operator: what merged (SHA), production's state and health, what announced where, what was
-   parked in triage (by stub name — the health stub, if one was written, is uncommitted and
-   waits for them), and that the run is archived — on a UAT repo, that it is now on the UAT
-   address and `promote.sh status` shows the batch. The usage `end` line was
-   written before the close-out in step 7; nothing else is written after the merge.
+   **(c) The record is already merged — the stop report carries the rest.** The `- production:`
+   and `- health:` lines and the announce outcome go in the report (the record on `main` cannot
+   take a post-merge line without a second PR, and there is no second PR). Report per
+   `.icm/_shared/output.md`:
+
+   ```
+   **release <slug> merged** <sha> · CI GREEN · <PR link>
+
+   - production <state> (uat <state> on a UAT repo) · health <verdict> · announce <outcome>
+   - <what the reviews found and where it went — the parked triage stubs by name, or "nothing parked">
+
+   Operator:
+   1. <on health FAIL or production ERROR> open /pipeline hotfix — or commit the uncommitted health stub <stub name> for the bug lane
+   2. <on a UAT repo> check the batch on the UAT address (promote.sh status), and record the client's word with promote approve when they give it
+   ```
+
+   The usage `end` line was written before the close-out in step 7; nothing else is written
+   after the merge.
 
 ## Outputs
 
@@ -331,7 +341,7 @@ Appended to `.icm/runs/<slug>/03_build/output/notes.md`:
 
 Plus `.icm/runs/<slug>/usage.md` gaining the `release start` and `release end` lines (the file
 travels with the archive). The post-merge `- production:` and `- health:` lines and the announce
-outcome are reported in the stop message (step 9c).
+outcome are reported in the stop report (step 9c).
 
 Plus the changelog page, where the repo has one (unless `announce: none`), and any docs edits —
 all in the one PR.

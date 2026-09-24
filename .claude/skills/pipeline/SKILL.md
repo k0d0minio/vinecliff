@@ -76,7 +76,12 @@ the source, settles the scope in session and cuts the intake batch in one sittin
 
 ## How to run a stage or lane
 
-1. Read `.icm/CONTEXT.md` once this session if you haven't — the workspace map (Layer 1).
+1. Read `.icm/CONTEXT.md` once this session if you haven't — the workspace map (Layer 1) — and
+   `.icm/_shared/output.md`, the output doctrine for the **chat** every stage and lane holds: a
+   short line per phase change or notable event (`CI red on lint — fixing`), no narration of tool
+   calls or pasted file contents; **at every stop, the one report shape** its stop step names.
+   It never shortens a file — the PR body, the spec and the records stay as full as their
+   contracts ask, and every gate checkbox stays in the PR body.
 2. Resolve the `<slug>` (kebab-case). Scope picks new slugs; every stub's `feature-slug` was
    fixed at the cut, so `new` never invents one. Scope takes no slug — a scope that came out
    wrong is deleted and Scope is run again from the source.
@@ -113,8 +118,8 @@ the source, settles the scope in session and cuts the intake batch in one sittin
    Scope. You only ever **read** the checkboxes (`.icm/_shared/github.md`) — never tick one, and
    never start the next stage on your own. Lane PRs carry no checkboxes: their gate is the merge
    button, which the operator presses in the GitHub UI after their smoke.
-   After each stage, say what's done, where the output is, and which `/pipeline <next>` comes
-   when the human is ready.
+   After each stage or lane, report per `.icm/_shared/output.md` — the next `/pipeline <verb>`,
+   when the human is ready, is an item on its `Operator:` list.
 6. **A run ends at the merge, and the merge is what closes it out.** Release (and every lane)
    runs `retrospective.sh` — what the run fixed on the way, promoted into
    `_shared/project-rules.md` → Learned rules for the next run — and then `close-out.sh` on the

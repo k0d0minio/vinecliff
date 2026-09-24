@@ -81,17 +81,28 @@ Context budget: the Inputs table above is the budget (see `.icm/CONTEXT.md` → 
    required check(s) — `required_checks` in `.icm/project.json` — carry the verdict on a
    docs-only push).
 
-5. **STOP.** Report the preview URLs `ci-status.sh` printed (if any product app built) and say:
-   "smoke-test, then squash-merge from GitHub". You do not merge lane PRs and you do not
-   re-invoke the lane — the operator's merge click is the gate. A chore announces nothing (the reporting hook
+5. **STOP.** Report per `.icm/_shared/output.md`:
+
+   ```
+   **chore <slug> ready** · CI GREEN · <PR link>
+
+   - <what changed, and the invariant held>
+   - <anything parked in triage, or a surprise the operator should know>
+
+   Operator:
+   1. <if a product app built> smoke the previews: <the URLs ci-status.sh printed>
+   2. squash-merge the PR from GitHub
+   ```
+
+   You do not merge lane PRs and you do not re-invoke the lane — the operator's merge click is
+   the gate. A chore announces nothing (the reporting hook
    is for user-visible change — `_shared/project-rules.md` → Reporting); nothing watches the
    merge. On a UAT repo the merge reaches UAT, and production with the batch's
    promotion (`_shared/promotion.md`). The usage `end` line was written
    just before the close-out (above); nothing is written now. If you
    parked a finding in `.icm/intake/triage/` on the way and the folder now holds more than 60
-   active stubs (`ls .icm/intake/triage/*.md | wc -l`; `intake/CONTEXT.md` → Triage → cap), say
-   so here — `triage/ holds N active stubs (cap 60) — run triage report` — and name
-   `triage report` as the suggested next command.
+   active stubs (`ls .icm/intake/triage/*.md | wc -l`; `intake/CONTEXT.md` → Triage → cap), add
+   `run triage report — triage/ holds N active stubs (cap 60)` to `Operator:`.
 
 ## Outputs
 

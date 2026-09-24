@@ -11,6 +11,11 @@ stops, so nothing is carried in anyone's head.
 ## Blockers
 
 - <what blocks, and who unblocks it — or "none">
+- blocked on operator: <the human-only act that unblocks the run — tick a gate, merge, a
+  dashboard or env change>
+
+A blocking operator act is written here **and** in the stop report's `Operator:` list; a
+non-blocking one lives only in that list, never here (`_shared/output.md` → Split by actor).
 
 ## Do not
 

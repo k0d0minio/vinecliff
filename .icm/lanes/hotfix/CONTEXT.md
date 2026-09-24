@@ -78,13 +78,22 @@ Context budget: the Inputs table above is the budget (see `.icm/CONTEXT.md` → 
    with `notes.md`), then `usage-snapshot.sh <slug> hotfix end` (so the close-out commit carries
    the line), then `.icm/scripts/close-out.sh <slug>` → `CLOSED`, push, `ci-status.sh`
    once more → `GREEN`.
-6. **STOP.** Report the preview URL, the recovery chosen, and — where the operator rolled Vercel
-   back — that production is on the previous deployment until this PR merges. "Smoke-test, then
-   squash-merge from GitHub." After their merge, Release's rule applies to a lane too: nothing
-   watches production; the operator may run `deploy-status.sh --sha <merge-sha>` once, by hand.
-   On a UAT repo the stop message also names the promotion: after the merge,
-   `promote.sh status` (what rides with the fix), `promote.sh approve --by "<who>"` on the
-   client's word, then the operator publishes the drafted Release.
+6. **STOP.** Report per `.icm/_shared/output.md`:
+
+   ```
+   **hotfix <slug> ready** — recovery <chosen> · CI GREEN · <PR link>
+
+   - <the fault and the fix, in a line each>
+   - <where the operator rolled Vercel back> production is on the previous deployment until this PR merges
+
+   Operator:
+   1. smoke the preview: <the URL ci-status.sh printed>
+   2. squash-merge the PR from GitHub
+   3. <on a UAT repo> after the merge: promote.sh status (what rides with the fix), promote.sh approve --by "<who>" on the client's word, then publish the drafted Release on GitHub
+   ```
+
+   After their merge, Release's rule applies to a lane too: nothing watches production; the
+   operator may run `deploy-status.sh --sha <merge-sha>` once, by hand.
 
 ## Outputs
 
