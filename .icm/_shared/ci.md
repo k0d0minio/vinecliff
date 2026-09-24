@@ -9,6 +9,41 @@ in `.icm/project.json`, written up in `_shared/project-rules.md` → The factory
 The rule the whole file exists to enforce: **a stage never merges, hands off, or declares done on a
 verdict it did not actually establish.** Not-yet-red is not green.
 
+## What CI is for — the cost floor (decision D43)
+
+GitHub bills Actions **per job, rounded up to a whole minute**, and only on private
+repositories — a ten-second label job costs the same minute as a ten-second lint, and a
+workflow that fires on every push to every PR spends its minutes whether or not it had anything
+to say. The estate's answer is one shape for every repo, public and private alike, so nothing
+changes when a repo's visibility does:
+
+| Belongs in CI                                                                                                                                                                                                       | Does not                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The deploy** — Vercel's build of the PR head, read as a commit status. It is the verdict, and it costs no Actions minute.                                                                                          | A `build` step — Vercel already built it.                                                                                                                                                                                                                |
+| **One advisory quality job** on a **ready** head only — lint, typecheck, unit tests — named `… (advisory)`: reported by `ci-status.sh`, never required, never waited on by the merge.                                | The same job on a draft head, on `main` after a merge, or on a diff of `.icm/**` and markdown only.                                                                                                                                                      |
+| **What needs a secret, a runner or a clock the session does not have** — a production migration behind its environment gate, a preview database made per PR, a nightly audit, a cleanup on PR close, the release workflow. | The pipeline's own chores — label projection, spec / intake / knowledge-map validation, gate reading. The session runs the same scripts (`project-labels.sh`, `validate-*.sh`) at the step that changes the thing; the gate is read from the PR body. |
+| A browser walk **only where a client pays for its minutes**.                                                                                                                                                        | Everywhere else the walk is the operator's, at Ready-to-merge, from the preview URL `ci-status.sh` printed — and anything that fires on every commit status or every PR edit "to be safe".                                                             |
+
+So on the typical repo a PR carries **the deploy status** (blocking, and on a ruleset where the
+plan allows one) and **one advisory job on a ready head**, and `required_checks` in
+`.icm/project.json` is **empty**. A draft head owes CI nothing: its pre-flip check is the
+session's changed-files scripts (`format.sh`, `lint.sh`, `security-check.sh`), and
+`ci-status.sh` on a draft settles at once on zero signals — GREEN there means "nothing owed,
+nothing red", and authorises only the flip. The full gate is the ready head's: the previews'
+statuses, and the advisory job's report beside them.
+
+Two rules keep the shape honest:
+
+- **Advisory is not optional.** A red advisory job is a finding: read at the stop, fixed on the
+  branch like any other, named in the stop report. `ci-status.sh` lists it under its own heading.
+  What "advisory" changes is only that the merge never waits on it — the deploy is what the merge
+  waits on, and a ruleset requires the deploy status or nothing.
+- **Never add a workflow "because it is cheap".** Every job is a minute; every trigger is a run.
+  A new workflow is a template change request (`_shared/template-change.md`) or, for a
+  project-owned file, a line in `_shared/project-rules.md` → The factory saying what it costs and
+  what it buys. `setup.sh` names the retired chore workflows (`pipeline`, `gates`, `labels`) and
+  a quality workflow that still fires on `push: main` or on drafts, for the operator to remove.
+
 ## Two surfaces, and you must read both
 
 GitHub reports a commit's health in **two separate places**, and the pipeline's most important
@@ -28,11 +63,11 @@ statuses too.
 
 ### Check runs
 
-The check runs a PR carries are the repo's own — its quality workflow, whatever conditional jobs
-it wires (database migrations, audits, label projection), and its smoke check where it declares
-one. This file does not list them: the names `ci-status.sh` waits for are `required_checks` in
-`.icm/project.json`, and what each one runs, and on which tier, is written up in
-`_shared/project-rules.md` → The factory.
+The check runs a PR carries are the repo's own — its advisory quality job, whatever conditional
+jobs it wires (database migrations, audits), and a smoke check where a client pays for one. This
+file does not list them: the names `ci-status.sh` waits for are `required_checks` in
+`.icm/project.json` — **empty by default** (the cost floor above) — and what each one runs, and
+on which tier, is written up in `_shared/project-rules.md` → The factory.
 
 Three things hold for every repo, whatever its inventory:
 
@@ -40,7 +75,8 @@ Three things hold for every repo, whatever its inventory:
   started. A check that is safe to require in branch protection runs on **every** PR and
   short-circuits to success on a diff it has nothing to say about (markdown-only, `.icm/**`-only),
   rather than being left out by a path filter — a required check that a path filter skips hangs
-  every PR that did not trigger it.
+  every PR that did not trigger it. An **advisory** job is under no such rule: nothing waits on
+  it, so it path-filters freely and skips drafts, which is exactly what makes it cheap.
 - **A check run is named after its job, not its workflow.** Match on the job name — that is what
   appears on the PR, what branch protection requires, and what `required_checks` lists.
 - **`Vercel Preview Comments` is noise.** Not a build. A zero-second, always-`success` marker that
@@ -49,6 +85,11 @@ Three things hold for every repo, whatever its inventory:
   check's, and only one of the two looked at a page.
 
 #### The smoke check is required conditionally, and that conditionality is the point
+
+A browser walk in CI is the one exception the cost floor names — only where a client pays for its
+minutes. Everywhere else the walk is the operator's, at Ready-to-merge, from the preview URL
+`ci-status.sh` printed, and `smoke_check` is absent from `.icm/project.json`. Where one is
+declared, the rest of this section holds.
 
 A repo that declares a smoke check — `smoke_check` in `.icm/project.json`, an object of `name`
 (the check run), `workflow` (the file that creates it) and `preview_status` (the deploy status it
@@ -241,16 +282,16 @@ a wait:
 
 | Phase                | GREEN means                                                                                                                                                                                                                                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Draft**            | The **cheap tier** settled: the repo's quality workflow on its draft tier (what that tier runs is the repo's own — `_shared/project-rules.md` → The factory), the conditional jobs skipped by design, and **zero previews**. A draft GREEN authorises exactly one thing: Build flipping the PR ready. |
-| **Ready for review** | The **full gate** settled: the required checks on their full tier, the conditional jobs where the diff warrants them, and the affected preview projects' statuses. This is the only GREEN the smoke, the Ready-to-merge tick, and the merge rest on.                                              |
+| **Draft**            | **Nothing owed** (the cost floor): no quality job, the conditional jobs skipped by design, and **zero previews** — `ci-status.sh` settles at once on zero signals. The pre-flip check is the session's: `format.sh`, `lint.sh` and `security-check.sh` over the changed files. A draft GREEN authorises exactly one thing: Build flipping the PR ready. A repo that still runs a job on drafts says so, with what it costs, in `_shared/project-rules.md` → The factory. |
+| **Ready for review** | The **full gate** settled: the affected preview projects' statuses (the verdict), the advisory quality job reported beside them, the conditional jobs where the diff warrants them, and any check the repo still names in `required_checks`. This is the only GREEN the smoke, the Ready-to-merge tick, and the merge rest on.                                                                                                                                       |
 
 Two consequences worth spelling out:
 
-- **The flip is what starts the full gate.** `ready_for_review` triggers a fresh full-tier run,
+- **The flip is what starts the full gate.** `ready_for_review` triggers the advisory job's run,
   and Build's contract follows the flip with a push (empty commit if nothing is pending), so the
-  full verdict settles on a fresh head — never on a stale draft-era green.
+  previews and the full verdict settle on a fresh head — never on a stale draft-era green.
 - **`converted_to_draft` downgrades the verdict with it.** A ready PR pulled back to draft
-  cancels its in-flight full run (the concurrency group) and re-settles on the cheap tier; any
+  cancels its in-flight advisory run (the concurrency group) and re-settles on nothing owed; any
   full-gate GREEN it held no longer authorises a merge.
 
 **PENDING is the verdict this pipeline kept losing.** It is not a soft green and it is not a reason

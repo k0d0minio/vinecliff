@@ -83,10 +83,9 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
    .icm/scripts/project-labels.sh <slug> --stage release
    ```
 
-   The PR reads `stage:release` from the moment the stage starts. CI's own projection would only
-   move it once the `## Release` record is pushed (step 7), at the end of the stage — and the
-   close-out push that follows hides the run folder from the labels step altogether — so Release
-   is the one stage that projects its own label (`_shared/github.md` → Labels).
+   The PR reads `stage:release` from the moment the stage starts — `--stage auto` would only say
+   so once the `## Release` record exists (step 7), at the end of the stage
+   (`_shared/github.md` → Labels).
 
 2. **Read the gate.** `pull_request_read` (method `get`) → **Ready to merge** must be `[x]`.
    Unticked → **STOP** and tell the operator — this is the stage's one stop-and-wait, and you
@@ -103,13 +102,12 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
    on. The script names the tier: a ready head settles the **full gate** — a cheap-tier verdict
    here means the PR is somehow still draft, which is Build unfinished, not a pass.
 
-   Your own docs/changelog/close-out pushes below need not re-earn this verdict at full price
-   where the repo's quality workflow carries a settled verdict forward across a push whose diff
-   is entirely verdict-preserving (`.icm/**`, markdown, the archive move) — whether it does, and
-   how it says so, is the repo's own (`_shared/project-rules.md` → The factory). Any code in the
-   push — the merge of `main` in step 7 included, when `main` moved — takes the full path again.
-   Re-run `ci-status.sh` after the last push either way — the carry is CI's optimisation, never
-   a licence to skip the settled-verdict read.
+   Your own docs/changelog/close-out pushes below run nothing in CI where the repo's advisory
+   job path-filters `.icm/**` and markdown (`_shared/ci.md` → the cost floor) — the previews'
+   statuses are the verdict, and a push the deploy's ignore step skips reads as skipped, not
+   failed. Any code in the push — the merge of `main` in step 7 included, when `main` moved —
+   builds again. Re-run `ci-status.sh` after the last push either way: a settled verdict is
+   read, never assumed.
 
 4. **Run the review passes, then triage every finding by the rule.**
    - **Readiness, measured first:** `.icm/scripts/env.sh audit --changed` → `RESULT: OK`. `GAPS`

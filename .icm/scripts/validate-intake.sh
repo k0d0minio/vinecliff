@@ -18,8 +18,8 @@
 # still part of the batch for every check here — a partially consumed batch must still be a
 # contiguous 1..m, or "next" stops meaning anything.
 #
-# Runs in .github/workflows/pipeline.yaml on PRs touching .icm/intake/**, ADVISORY — like
-# spec-check, it warns to the job summary and never red-blocks a PR. Requires no network. Pure
+# Run by the SESSION before the intake gate (no workflow runs it — decision D43), ADVISORY — like
+# validate-spec.sh, it warns and never blocks a PR. Requires no network. Pure
 # bash/awk.
 #
 # Usage:

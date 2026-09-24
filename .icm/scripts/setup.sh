@@ -21,8 +21,10 @@
 #    3. project.json  name, complexity, required_checks, personas, deploy, reporting, migrations
 #                  (stamp/tool/out_of_order), database (isolation, provider — a Neon project is
 #                  read once when its key is in the shell: production branch, preview branching,
-#                  and with UAT the non-production project too; a MongoDB cluster's names and
-#                  commands, and the cluster read once when its URI is in the shell — D35),
+#                  and with UAT the non-production project too — where it holds no preview/*,
+#                  the open PRs are read once: none open is INFO, an open one is the gap; a
+#                  MongoDB cluster's names and commands, and the cluster read once when its URI
+#                  is in the shell — D35),
 #                  security, support, health_endpoint, uat — missing or still at the stub's value
 #                  is a line with the question. A declared UAT environment (D39: `uat: {target,
 #                  url}`, both or neither) is checked — the UAT database declared (Neon, D41: a
@@ -43,8 +45,10 @@
 #                  usage.md pairs with a start and no end. Needs a GitHub route; says so without.
 #    8. Knowledge  validate-knowledge-map.sh.
 #    9. Reporting  kinds → channels; unset channel variables; announce_from vs the workflow.
-#   10. Workflows  the reference release.yaml / labels.yaml present, or declared absent in
-#                  _shared/project-rules.md; neon-cleanup.yaml where a Neon project branches per
+#   10. Workflows  the reference release.yaml / quality.yaml present, or declared absent in
+#                  _shared/project-rules.md; the retired chore workflows (pipeline, gates, labels)
+#                  and a quality workflow that still fires on push: main or on drafts, named for
+#                  the operator to remove (D43); neon-cleanup.yaml where a Neon project branches per
 #                  preview, mongodb-cleanup.yaml where a MongoDB repo has a database per preview
 #                  (`--fix` seeds either from --template); type:hotfix and type:handover in
 #                  .github/labels.yml. On a UAT repo the release workflow is REQUIRED (it is the
@@ -263,6 +267,19 @@ if [ -f .icm/project.json ]; then
           if [ "$(neon_previews)" = vercel ]; then
             np="$(printf '%s' "$nnb" | jq '[.[] | select(.name | startswith("preview/"))] | length')"
             if [ "$np" -gt 0 ]; then ok "neon: preview branching is live — $np preview/* branch(es)"
+            elif neon_split; then
+              # Zero is the right count when no PR is open: neon-cleanup deletes preview/<branch> on close.
+              # Only an open PR without its preview/<branch> is a gap — one bounded read of the open PRs.
+              prs="$( ( source "$here/lib/gh.sh" >/dev/null 2>&1 || exit 1
+                        { [ -n "${gh_token:-}" ] || (command -v gh >/dev/null 2>&1 && env -u GITHUB_TOKEN -u GH_TOKEN gh auth status >/dev/null 2>&1); } || exit 1
+                        r="$(gh_api GET "/repos/${repo}/pulls?state=open&per_page=100")" || exit 1
+                        [ "$(printf '%s' "$r" | tail -n1)" = "200" ] || exit 1
+                        printf '%s' "$r" | sed '$d' | jq -r '[.[] | "#\(.number) (\(.head.ref))"] | join(", ")' ) 2>/dev/null )" || prs="?"
+              if [ "$prs" = "?" ]; then info "neon: no preview/* branch — open PRs not read (no GitHub route in this environment); none is expected until a PR is open"
+              elif [ -z "$prs" ]; then info "neon: no preview/* branch — none expected: no PR is open (neon-cleanup deletes preview/<branch> when its PR closes)"
+              else
+                warn "neon: open PR(s) without their preview/<branch>: $prs — is the Vercel integration's Preview branching enabled? (db-env.sh init lists the toggle); until it is, previews share the Preview environment's database"
+              fi
             else warn "neon: no preview/* branch yet — is the Vercel integration's Preview branching enabled? (db-env.sh init lists the toggle); until it is, previews share the Preview environment's database"; fi
           fi
         fi
@@ -430,10 +447,29 @@ else [ "$has_release" -eq 1 ] && warn "announce_from: session but .github/workfl
 
 # --- 10. workflows -----------------------------------------------------------------------------------------------------
 echo "[10/11] Workflows — the reference workflows, present or declared absent"
-for wf in release labels; do
+for wf in release quality; do
   if [ -f ".github/workflows/$wf.yaml" ] || [ -f ".github/workflows/$wf.yml" ]; then ok "$wf workflow present"
   elif grep -qiE "$wf(\.yaml|\.yml)?.*(absent|none|not (used|seeded)|no )" .icm/_shared/project-rules.md 2>/dev/null; then ok "$wf workflow declared absent in project-rules.md"
-  else info "$wf workflow absent and project-rules.md does not say so — /setup seeds the reference one (announce_from: ci) or records the absence"; fi
+  else info "$wf workflow absent and project-rules.md does not say so — /setup seeds the reference one or records the absence"; fi
+done
+# The cost floor (D43, _shared/ci.md): the pipeline's chores run in-session, so the chore
+# workflows are retired; the quality job is advisory, ready-only and never on main. Named,
+# never removed here — the operator git rm's them.
+for wf in pipeline gates labels; do
+  for f in ".github/workflows/$wf.yaml" ".github/workflows/$wf.yml"; do
+    [ -f "$f" ] && warn "$f is a retired chore workflow — the session runs project-labels.sh / validate-*.sh itself (D43); git rm it"
+  done
+done
+for f in .github/workflows/*.y*ml; do
+  [ -f "$f" ] || continue
+  case "$(basename "$f")" in release.*|db-migrate.*|db-migrations.*|uat-deploy.*|neon-cleanup.*|mongodb-cleanup.*) continue ;; esac
+  grep -qiE 'run:.*(lint|typecheck|tsc|vitest|jest|next build)' "$f" 2>/dev/null || continue
+  if awk '/^on:/{on=1;next} on&&/^[^[:space:]#]/{on=0} on' "$f" | grep -qE '^\s*push:'; then
+    warn "$f runs a quality job on push (main) — the merge is proven by the deploy; drop the push trigger (D43)"
+  fi
+  if grep -qE 'run:.*(next build|pnpm (-r )?build|npm run build)' "$f" 2>/dev/null; then
+    warn "$f builds the app — Vercel already does; drop the build step (D43)"
+  fi
 done
 if [ "$(database_provider)" = neon ] && [ "$(neon_previews)" = vercel ]; then
   if [ -f .github/workflows/neon-cleanup.yaml ] || [ -f .github/workflows/neon-cleanup.yml ]; then ok "neon-cleanup workflow present (deletes preview/<branch> and run/<slug> when a PR closes)"

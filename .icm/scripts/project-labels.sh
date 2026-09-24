@@ -5,9 +5,10 @@
 # a pure function of the spec header + the stage, so a script can project it exactly — no "mostly".
 # It reads the PR number from run.md and the personas/complexity from spec.md, assembles the FULL
 # label set, and PUTs it (the GitHub labels API replaces the whole set, which is what we want — the
-# fixed vocabulary lives in .github/labels.yml). CI is the normal caller (the labels job in
-# .github/workflows/pipeline.yaml, with --stage auto, on every push touching .icm/runs/**);
-# new-run.sh calls it once at Define; by hand it's the manual fallback. Requires curl + jq.
+# fixed vocabulary lives in .github/labels.yml). The SESSION is the caller (decision D43 — no
+# workflow projects labels any more): new-run.sh calls it once at Define, Build calls it with
+# --stage auto after the first push that carries notes.md, Release with --stage release at its
+# step 1 (_shared/github.md → Labels). Requires curl + jq.
 #
 # Config is read straight from the process environment — this script does NOT load any .env file.
 # The label write goes through .icm/scripts/lib/gh.sh (curl with the token, else a logged-in `gh`

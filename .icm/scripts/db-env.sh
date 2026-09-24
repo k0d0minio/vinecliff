@@ -59,7 +59,9 @@
 #                the pipeline's — yours). With uat, both projects: a preview/* or run/* branch in
 #                production's project is a [WARN] (its database still branches previews — D41).
 #                With a Vercel token in reach, the product project's build command: the place
-#                previews and UAT apply their migrations. Read-only.
+#                previews and UAT apply their migrations — with uat and no override, the
+#                vercel-build script in the project's root-directory package.json, which Vercel
+#                runs ahead of build. Read-only.
 #                          RESULT: NEON <n> branch(es) · production <name> · uat <state> · previews <n> · runs <n>
 #   init         prints the one-time acts only the operator can perform — the API key and where it
 #                lives, the integration's Preview-branching toggle, the build command that applies
@@ -384,7 +386,12 @@ status)
   if [ -f "$here/lib/vercel.sh" ] && project_has '.deploy.projects'; then
     bc="$( ( source "$here/lib/vercel.sh"; [ -n "$vercel_token" ] || exit 0
              deploy_projects | jq -r 'select((.class // "product") == "product") | .name' | head -n1 | while read -r pn; do
-               vercel_project "$pn" 2>/dev/null | jq -r '"\(.name): \(.buildCommand // "the framework default")"'
+               pj="$(vercel_project "$pn" 2>/dev/null)"
+               # With UAT: no override means Vercel runs the root directory's vercel-build script ahead of build — name it.
+               rd="$(printf '%s' "$pj" | jq -r '.rootDirectory // "" | sub("^\\./"; "") | sub("/$"; "")')"; pkg="${rd:+$rd/}package.json"
+               if [ "$split" -eq 1 ] && printf '%s' "$pj" | jq -e '(.buildCommand // "") == ""' >/dev/null && vb="$(jq -er '.scripts["vercel-build"] // empty' "$pkg" 2>/dev/null)"; then
+                 printf '%s: the vercel-build script in %s (`%s`)\n' "$(printf '%s' "$pj" | jq -r .name)" "$pkg" "$vb"
+               else printf '%s' "$pj" | jq -r '"\(.name): \(.buildCommand // "the framework default")"'; fi
              done ) 2>/dev/null || true )"
     [ -n "$bc" ] && echo "build:      $bc — previews and UAT carry a branch's migrations only if this runs the migrate step (db-env.sh init)"
   fi
