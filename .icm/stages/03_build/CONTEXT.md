@@ -6,12 +6,12 @@ open (ready for review) **and push**, so the full gate and the previews land. Re
 merge are Release's job — the operator smoke-tests the preview of what you hand over and ticks
 **Ready to merge** on the strength of it, so hand over only what you believe is complete.
 
-**The cadence is blind-until-ready** (`_shared/ci.md` → verdict by phase): while the PR is draft,
-every push runs the cheap CI tier and builds **no previews** — you are building blind, by the
-operator's explicit decision, and that is not a defect to work around. The ready flip is the moment
-the machine spends: the full gate re-earns the verdict and the affected product apps preview.
-Build finishes on a cheap-tier GREEN, flips, pushes, and settles the full verdict — in that
-order.
+**The cadence is blind-until-ready** (`_shared/ci.md` → the cost floor, verdict by phase): while
+the PR is draft, CI owes nothing — no quality job and **no previews** — you are building blind, by
+the operator's explicit decision, and that is not a defect to work around; the session's
+changed-files scripts are the pre-flip check. The ready flip is the moment the machine spends: the
+affected product apps preview and the advisory quality job reports. Build finishes on a clean
+pre-flip check, flips, pushes, and settles the full verdict — in that order.
 
 ## Inputs (read only these)
 
@@ -53,9 +53,10 @@ everything except the source files you actually edit. Record overruns on a one-l
    checkbox must be ticked. **If it isn't, STOP** — do not build against an unapproved spec, and
    never tick the box yourself. Tell the user to settle the spec (`revise <slug> "…"` if it
    needs changing) and tick the box, then re-run Build.
-3. **Stage label — CI handles it.** The `pipeline.yaml` labels job re-projects labels on every
-   push and derives `stage:*` from which run outputs exist, so committing `notes.md` (step 8) is
-   what moves the board to `stage:build`. Skip `project-labels.sh` — it's only a manual fallback.
+3. **Stage label — project it yourself, once, after the first push that carries `notes.md`**
+   (step 8): `.icm/scripts/project-labels.sh <slug> --stage auto` derives `stage:*` from which
+   run outputs exist and PUTs the full set (`_shared/github.md` → Labels). No workflow does this
+   any more (the cost floor) — the board moves when the session that pushed the output says so.
 4. **Plan, then implement** the acceptance criteria, and only those. First act: write
    `plan.md` — the change in passes, each one layer (schema, server, UI, docs) with what "done"
    looks like — and the commit-sized queue in `tasks.md` under the definition of done the spec
@@ -111,21 +112,21 @@ everything except the source files you actually edit. Record overruns on a one-l
    `--no-verify`. Where the repo wires the same call as its git pre-commit hook it runs on its
    own. Don't run the full sweep — format, lint,
    typecheck, test, build (see Verify below). A pre-commit hook formats on commit, where the repo
-   has one; CI runs format/lint/typecheck; the Vercel preview builds the PR. Spend your turns on
-   code. A pre-commit hook only exists in a fresh cloud session once the repo's dependencies are
-   installed — if the session-start output said the hook is off, the commit lands unformatted.
-   Two cheap, changed-files-only tools exist for exactly those gaps and nothing wider, where the
-   repo wires them (`_shared/project-rules.md` → The factory): `.icm/scripts/format.sh` (the
-   repo's formatter over the files the branch changed) before committing when the pre-commit
-   hook is unavailable, and `.icm/scripts/lint.sh` (the repo's linter over the same files, each
-   package's own config, the repo's warning ceiling in view) when CI reports a lint failure or
-   before pushing a large change. Both run in seconds, build nothing, and end in one `RESULT:`
-   line; neither is the verdict — CI is.
+   has one; the advisory quality job runs lint/typecheck/test once the head is ready; the Vercel
+   preview builds the PR. Spend your turns on code. A pre-commit hook only exists in a fresh
+   cloud session once the repo's dependencies are installed — if the session-start output said
+   the hook is off, the commit lands unformatted. Two cheap, changed-files-only tools are the
+   draft head's whole check (`_shared/ci.md` → the cost floor), where the repo wires them
+   (`_shared/project-rules.md` → The factory): `.icm/scripts/format.sh` (the repo's formatter
+   over the files the branch changed) before committing when the pre-commit hook is
+   unavailable, and `.icm/scripts/lint.sh` (the repo's linter over the same files, each
+   package's own config, the repo's warning ceiling in view) **before every push**. Both run in
+   seconds, build nothing, and end in one `RESULT:` line; neither is the verdict — the deploy is.
 8. **Write build notes** (`notes.md`, Outputs below) and keep the pack current: `status.md`
    (`step`, `ci`, `blocked`), `tasks.md` ticks, `decisions.md` for any decision this stage had to
    make (a spec gap — say so in Notes for Release). Commit the run files alongside the code and
    push, so the PR reflects current state and a session that resumes finds where this one is.
-9. **Establish a settled cheap-tier verdict on the draft head — Build does not flip an unread run.**
+9. **Establish the pre-flip verdict on the draft head — Build does not flip an unread run.**
 
    First, the environment this branch changed, measured: `.icm/scripts/env.sh audit --changed`
    → `RESULT: OK`. `GAPS` names a key this branch added that is missing from a surface it is
@@ -138,9 +139,10 @@ everything except the source files you actually edit. Record overruns on a one-l
    ```
 
    It blocks until the run settles and prints `RESULT: GREEN | RED | PENDING`, naming the tier it
-   settled on (`_shared/ci.md`). On a draft head that is the **cheap tier** — the checks the repo
-   runs on a draft (`_shared/project-rules.md` → The factory), zero previews — and a draft GREEN
-   authorises exactly one thing: the flip.
+   settled on (`_shared/ci.md`). On a draft head that is **nothing owed** — no quality job, zero
+   previews, the call settles at once — so the verdict that matters here is the scripts': a
+   `lint.sh` `PROBLEMS` or a `security-check.sh` `BLOCKED` is a RED of your own to fix before
+   the flip. A draft GREEN authorises exactly one thing: the flip.
    - **GREEN** → go to step 10.
    - **RED** → this is your failure to fix, not Release's: read the failing job
      (`get_job_logs`, `failed_only: true`), record it in `error.log` (step 4), fix on the
@@ -176,7 +178,7 @@ everything except the source files you actually edit. Record overruns on a one-l
     that is not idempotent), never a flip with a note. Then the branch
     as a whole through the gate once: `.icm/scripts/security-check.sh <slug> --branch` → `OK`.
     Release's step 7(a) stays as the final merge and is usually a no-op after this. A merge
-    that changed code takes the cheap tier again: re-run step 9's `ci-status.sh` before flipping.
+    that changed code takes step 9's scripts again before flipping.
 
 11. **Flip ready, then push.** `update_pull_request`, `draft: false` (per `_shared/github.md`),
     **then push** — an empty commit (`git commit --allow-empty -m "chore: <slug> — ready"`) when
@@ -185,9 +187,10 @@ everything except the source files you actually edit. Record overruns on a one-l
     materialise on a fresh head, so the full verdict can never rest on a stale draft-era green.
     Open means "reviewable"; it is not the merge authorisation.
 12. **Settle the full verdict on the post-flip head** — the same `ci-status.sh <slug>` call, which
-    now reports the **full gate**: the checks the repo adds on a ready head
-    (`_shared/project-rules.md` → The factory) and the affected product-app previews with their
-    URLs. RED here is still yours to fix.
+    now reports the **full gate**: the affected product-app previews with their URLs (the
+    verdict) and the advisory quality job's report beside them (`_shared/project-rules.md` → The
+    factory). RED here is still yours to fix — and a red advisory job is fixed too: it is a
+    finding the merge never waits on, not one it may ignore.
 13. **Stop.** Rewrite `handoff.md` (next: smoke the previews, tick Ready to merge, release;
     blockers, if any) and set `status.md` to `step: done · ci: GREEN`; commit and push them with
     the last change. Last act: `.icm/scripts/usage-snapshot.sh <slug> build end`. Report per
@@ -274,13 +277,13 @@ where the repo has one + CI + the Vercel preview), not to your context window. *
 full sweep — format, lint, typecheck, test, build** — the `.claude/hooks/block-local-checks.sh`
 `PreToolUse` hook blocks them, where the repo ships it: push and read CI back.
 
-- **Format / Lint / Typecheck / Test** — the repo's quality workflow, tiered: a draft head runs
-  the cheap tier, the ready phase adds the rest; which checks sit in which tier is the repo's own
-  (`_shared/project-rules.md` → The factory). The **check run(s)** to look for on the PR are the
-  repo's required check(s) (`required_checks` in `.icm/project.json`), and those are the names to
-  require in branch protection. A required check that has not appeared means CI has not started,
-  never "not applicable" — `ci-status.sh` waits for it. A pre-commit hook, where the repo has
-  one, additionally auto-formats staged files.
+- **Format / Lint / Typecheck / Test** — on a draft head, the session's changed-files scripts
+  (`format.sh`, `lint.sh`); on a ready head, the repo's **advisory** quality job, named
+  `… (advisory)`, reported by `ci-status.sh` and never required (`_shared/ci.md` → the cost
+  floor). `required_checks` in `.icm/project.json` is empty unless the repo names something it
+  still waits for — and a required check that has not appeared means CI has not started, never
+  "not applicable". A pre-commit hook, where the repo has one, additionally auto-formats staged
+  files.
 - **Build** — the Vercel preview deploys, **from the ready flip on** (drafts are blind). These are
   **commit statuses, not check runs**: reading only the check runs is how a PR whose preview
   failed to compile looks entirely green. `.icm/_shared/ci.md` says how to read both surfaces and

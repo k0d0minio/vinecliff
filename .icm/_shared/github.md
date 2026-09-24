@@ -233,22 +233,20 @@ a human in the GitHub UI (fast-lane PRs, above):
 ## Labels
 
 The fixed vocabulary lives in `.github/labels.yml` (documentation + one-time repo setup).
-**Projection is CI's job, not the agent's:** on every push touching `.icm/runs/**`, the
-`labels` job in `.github/workflows/pipeline.yaml` runs `project-labels.sh <slug> --stage auto
---pr <n>` — it reads personas/complexity from `spec.md` and derives `stage:*` from **which run
-outputs exist** (spec.md → define · `03_build/output/notes.md` → build · a `## Release` section
-in that notes.md → release). Pushing a stage's output is what moves the label. `new-run.sh`
-projects the initial set when the PR opens; the script stays the manual fallback.
+**Projection is the session's, at the step that changes the thing** — no workflow does it
+(`_shared/ci.md` → the cost floor; decision D43): `new-run.sh` projects the initial set when
+the PR opens; Build runs `project-labels.sh <slug> --stage auto` after the first push that
+carries `notes.md`; Release runs `project-labels.sh <slug> --stage release` at its step 1. The
+script reads personas/complexity from `spec.md` and derives `stage:*` from **which run outputs
+exist** (spec.md → define · `03_build/output/notes.md` → build · a `## Release` section in that
+notes.md → release), and PUTs the full set — the GitHub labels API replaces the whole set. The
+labels are a projection of the files: a stage that pushed an output and skipped the call has a
+board one move behind, and the fix is the call, never a hand-edit.
 
-**Release is the one exception — it projects its own label.** A spine PR moves
-`stage:define → stage:build → stage:release`, and the first two moves are CI's: Define's push
-carries `spec.md`, Build's first push carries `notes.md`. Release's outputs are different: the
-`## Release` record is pushed at the end of the stage, and the close-out push that follows it
-moves the run folder out of `.icm/runs/`, where the labels step can no longer see it. Left to
-CI, the PR would read `stage:build` for the whole of Release and `stage:release` only for the
-minutes between the record push and the merge. So Release's step 1 runs
-`project-labels.sh <slug> --stage release` itself, and the PR reads `stage:release` from the
-moment the stage starts. Lane PRs carry `type:<lane>` only and never move.
+**Release projects `stage:release` at its start, not when its output lands.** A spine PR moves
+`stage:define → stage:build → stage:release`; Release's `## Release` record is pushed at the
+end of the stage, so `--stage auto` would say `stage:release` only for the minutes between the
+record push and the merge. Lane PRs carry `type:<lane>` only and never move.
 
 - `stage:` exactly one of `define → build → release`.
 - `type:feature` on spine PRs · `type:{bug,tweak,chore,hotfix,handover}` on lane PRs
@@ -290,15 +288,17 @@ never a second PR.
 ## Build — gate-check, implement, flip ready, then push
 
 1. Gate: `pull_request_read` (method `get`) → **Spec approved** must be `[x]`. Unticked → STOP.
-2. Implement; commit run files with the code; push (CI advances `stage:build`). Tick satisfied
+2. Implement; commit run files with the code; push, then `project-labels.sh <slug> --stage auto`
+   once `notes.md` is on the branch (the board's move to `stage:build`). Tick satisfied
    acceptance criteria via `update_pull_request` (tick state lives on the PR; text stays the spec's).
-   Draft pushes run the cheap tier and build no previews (blind-until-ready — `_shared/ci.md`).
-3. `ci-status.sh <slug>` → a settled cheap-tier `GREEN` before flipping. `RED` is Build's to fix,
-   not Release's.
+   Draft pushes run nothing in CI and build no previews (blind-until-ready — `_shared/ci.md` →
+   the cost floor); `format.sh` / `lint.sh` / `security-check.sh` are the pre-flip check.
+3. `ci-status.sh <slug>` → `GREEN` (nothing owed, nothing red) before flipping. A script's
+   `PROBLEMS` or `BLOCKED` is Build's to fix, not Release's.
 4. Hand-off: `update_pull_request` with `draft: false`, **then push** — an empty commit when
-   nothing is pending. The flip starts the full gate; the push makes the full-tier run and the
-   affected product-app previews land on a fresh head. Settle the full verdict with one more
-   `ci-status.sh` call; the operator's smoke and the **Ready to merge** tick follow it.
+   nothing is pending. The flip starts the full gate; the push makes the advisory quality job
+   and the affected product-app previews land on a fresh head. Settle the full verdict with one
+   more `ci-status.sh` call; the operator's smoke and the **Ready to merge** tick follow it.
 
 ## Release — reviews, gated merge
 
