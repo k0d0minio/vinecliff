@@ -112,6 +112,16 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
      Both `target` and `url`, or neither. **Refuse the declaration** when `setup.sh` says the team
      allows no custom environment ("UAT requires a Pro team") — UAT then stays undeclared. There
      is no UAT branch: never write `uat.branch`.
+   - "Pre-commit formatting in cloud sessions: `.claude/hooks/install-deps.sh` installs
+     dependencies at session start so Husky's pre-commit exists in a fresh clone (D44). It acts
+     only where the root `package.json` has a `prepare` script naming husky. This repo formats
+     with prettier but has no Husky — add it (`husky` + `lint-staged`, `"prepare": "husky"`, a
+     `.husky/pre-commit` running `lint-staged`) so cloud commits come out formatted?" Not a
+     report line — check it yourself: ask when `package.json` names `prettier` or `lint-staged`
+     and `jq -e '(.scripts.prepare // "") | test("husky")' package.json` fails; say so too when
+     `.claude/settings.json` never names `install-deps.sh` (the hook is then inert —
+     `icm-check.sh --fix` in icm-board registers it). Adding Husky is a code change: it goes on
+     the `claude/` branch step 6 opens, never as a project-owned file.
    - "`alert` maps to no channel — the red CI job is the alert. Keep that, and record it?"
    Every question has an escape hatch: "don't know" leaves the stub value and the report line.
 

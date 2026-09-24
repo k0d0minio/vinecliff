@@ -2,25 +2,44 @@
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled",
   "formatter": false,
+  // OpenCode runs only on Jamie's machine (D44), so a local MCP server path is safe to carry in
+  // every repo. The GitHub MCP server reads PR context without shelling out.
+  "mcp": {
+    "github": {
+      "type": "local",
+      "command": ["/home/jamie-nisbet/go/bin/github-mcp-server", "stdio"],
+      "environment": {
+        "GITHUB_TOOLSETS": "context,pull_requests"
+      },
+      "enabled": true
+    }
+  },
   "permission": {
     "bash": {
       "*": "allow",
 
       "* build*": "deny",
+      "*:build*": "deny",
       "* lint*": "deny",
       "* typecheck*": "deny",
       "* test*": "deny",
       "* format*": "deny",
       "* dev*": "deny",
+      "*:dev*": "deny",
       "* start*": "deny",
       "* preview*": "deny",
       "tsc*": "deny",
       "* tsc*": "deny",
+      "eslint*": "deny",
       "* eslint*": "deny",
+      "prettier*": "deny",
       "* prettier*": "deny",
+      "vitest*": "deny",
       "* vitest*": "deny",
       "* jest*": "deny",
       "* playwright*": "deny",
+      "next *": "deny",
+      "* next *": "deny",
 
       "git *": "allow",
       "gh *": "allow",
@@ -32,6 +51,7 @@
       "sed *": "allow",
       "head *": "allow",
       "tail *": "allow",
+      "jq *": "allow",
 
       // Push gate. Bash permissions are last-match-wins over the whole command, so
       // the claude/* allow must stay BELOW the ask to win — swap the two lines and
