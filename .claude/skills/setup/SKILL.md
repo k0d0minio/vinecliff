@@ -149,7 +149,11 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
    explicitly), push, open the PR with `create_pull_request` (`base: main`, ready — nothing to
    preview), body: the report's last `RESULT:` line and the decisions taken. A bare repo's first
    run is one PR; a maintenance run that changed nothing opens nothing and says so. Never merge;
-   never subscribe to the PR (`.icm/_shared/github.md` → PR events).
+   never subscribe to the PR (`.icm/_shared/github.md` → PR events). Report per
+   `.icm/_shared/output.md` — `setup <RESULT line> · CI <verdict> · <PR URL>` (no PR → `no
+   changes`), then `Operator:`: merge the PR, and every act still owed that `project-rules.md`
+   records (the `promote.sh init` / `db-env.sh init` lines above, a Vercel toggle, a token) —
+   one item each, actionable from the line alone.
 
 ## What this replaces, and what it does not touch
 

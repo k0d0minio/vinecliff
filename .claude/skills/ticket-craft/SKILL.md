@@ -54,3 +54,15 @@ not — the prompt is the brief either way.
   (`pr-conventions` → Ticket commits); inside a run it rides the run's PR.
 - Legacy flat `PREFIX-NNN` tickets (pre-2026-08-28) are left as they are — migrating a
   repo is `/project`'s judgment work, not a side effect of another task.
+
+## What the session says
+
+This is about the **chat** only — PR bodies, stubs and `handoff.md` stay as full as they need to
+be, and a gate checkbox lives in the PR body, never in chat. In chat: valuable information, easy
+to parse. While working, a short line per phase change or notable event (`CI red on lint —
+fixing`) — no narration of tool calls, no pasted files or diffs. At a stop: a bold outcome line
+`<task> <outcome> · CI <verdict> · <PR link>`, 2–5 bullets of what matters (decisions, surprises,
+what was parked), then `Operator:` as a numbered list of human-only acts with where to do them (a gate is
+named with its PR link), then `Unverified:` when anything was. **Never trimmed:** a STOP and its
+reason, a red check, anything skipped or unverified, a plaintext credential found. Pipeline repos
+hold the full doctrine in `.icm/_shared/output.md`.

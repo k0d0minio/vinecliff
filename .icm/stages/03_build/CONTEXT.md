@@ -67,8 +67,8 @@ everything except the source files you actually edit. Record overruns on a one-l
    **not this ticket's** → park it as a stub in `.icm/intake/triage/` (shape in
    `.icm/intake/CONTEXT.md`) and move on; never absorb it into this diff. **Cap notice:** if the
    folder then holds more than 60 active stubs (`ls .icm/intake/triage/*.md | wc -l`;
-   `intake/CONTEXT.md` → Triage → cap), say so in your stop message — `triage/ holds N active
-   stubs (cap 60) — run triage report` — and name `triage report` as the suggested next command.
+   `intake/CONTEXT.md` → Triage → cap), the stop report carries it as an `Operator:` item —
+   `run triage report — triage/ holds N active stubs (cap 60)`.
    The finding is still parked either way.
    - **Tests ride along, scoped by the spec.** When the diff touches pure logic that already has
      unit tests, update them in the same commit — a knowingly-red suite never gets pushed as
@@ -190,12 +190,25 @@ everything except the source files you actually edit. Record overruns on a one-l
     URLs. RED here is still yours to fix.
 13. **Stop.** Rewrite `handoff.md` (next: smoke the previews, tick Ready to merge, release;
     blockers, if any) and set `status.md` to `step: done · ci: GREEN`; commit and push them with
-    the last change. Last act: `.icm/scripts/usage-snapshot.sh <slug> build end`. Tell the user
-    Build is done, the PR is open **with the full gate green**, and pass on the preview URLs the
-    script listed. The path onward is: smoke-test those previews, tick **Ready to merge**, then
-    `/pipeline release <slug>` — the tick attests the manual testing, so nothing after it
-    re-asks. A Build that STOPs mid-way (an unapproved spec, an unanswerable criterion, a
-    blocked gate) writes `handoff.md` and `status.md` (`blocked: yes — why`) before it stops.
+    the last change. Last act: `.icm/scripts/usage-snapshot.sh <slug> build end`. Report per
+    `.icm/_shared/output.md`:
+
+    ```
+    **build <slug> done** · CI GREEN (full gate) · <PR link>
+
+    - <what was built, in a line>
+    - <anything that differs from the spec, a criterion met in an unexpected way, what was parked>
+
+    Operator:
+    1. smoke the previews: <the URLs ci-status.sh listed>
+    2. tick **Ready to merge** in the body of <PR link>, then run /pipeline release <slug>
+    ```
+
+    The tick attests the manual testing, so nothing after it re-asks. A Build that STOPs mid-way
+    (an unapproved spec, an unanswerable criterion, a blocked gate) writes `handoff.md` and
+    `status.md` (`blocked: yes — why`) before it stops — an operator act that unblocks it is a
+    Blockers line `blocked on operator: <act>` as well as an `Operator:` item — and reports the
+    STOP and its reason in full (never trimmed).
 
 ## Outputs
 
