@@ -11,43 +11,31 @@ working knowledge.
 ## Branches and what goes where
 
 - Code changes go through a **PR on a `claude/` branch** — never straight to `main`.
-- **Ticket state goes through a ticket PR into the repo's ticket base branch** (below) —
-  never a direct push. Stubs a run parks or consumes ride that run's own PR instead.
-- **icm-board alone is exempt:** it has no UAT branch and nothing to drift, so its ticket
-  commits (`Plan:` / `Wrap:`, `today.md`) and `Deal:` commits go straight to its `main`.
-  The exemption is icm-board's only — no other repo takes it (D38).
+- **Ticket state goes straight to `main` in every repo** (below) — `Plan:` / `Wrap:` /
+  `Scope:` commits, paths staged explicitly. Stubs a run parks or consumes ride that run's
+  own PR instead. icm-board's `today.md` and `Deal:` commits go straight to its `main` too.
 - Never rewrite history on a shared branch; never force-push `main`.
 
-## The ticket PR — the one PR an agent merges
+## Ticket commits — straight to main, no PR
 
-A repo's ticket state (`.icm/intake/`) has **one home: its ticket base branch** — the UAT
-branch where `.icm/project.json` declares `uat`, else `main`. Where the repo carries the
-pipeline, `.icm/scripts/lib/project.sh → pipeline_base_branch` answers it; ask that, never
-re-derive it. The board reads that branch, so **merging is publishing** — an unmerged stub
-does not exist. Every ticket change outside a run — a cut, a move to `_done/`, a drop, an
-epic archive, Scope's front, a parked template change — takes this one shape:
+A repo's ticket state (`.icm/intake/`) has **one home: `main`**, in icm-board and every
+client repo alike (D39 §8). The board reads `origin/main`, so **pushing is publishing** — an
+unpushed stub does not exist. Every ticket change outside a run — a cut, a move to `_done/`,
+a drop, an epic archive, Scope's front, a parked template change — takes this one shape:
 
-- **Branch** `claude/tickets-<topic>-<YYYYMMDD>`, cut from `origin/<base>`; the PR targets
-  `<base>`. Stage paths explicitly.
-- **Title** `Plan: <one line>` · `Wrap: <one line>` · `Scope: <slug> — intake cut`.
-- **Label** `type:tickets`. **Body** carries `- announce: none` and `- audience: internal`,
-  so no release workflow ever announces it to the client.
-- **The path guard:** `.icm/intake/**` — plus `.icm/runs/<slug>/**` for Scope's front, and
-  nothing else. A diff touching anything outside it is not a ticket PR.
+- **Where:** a worktree off `origin/main` (`git worktree add <scratch> origin/main`) — never
+  by moving a shared checkout off the branch it is on.
+- **Paths:** `.icm/intake/**` — plus `.icm/runs/<slug>/**` for Scope's front, and nothing
+  else. Before pushing, `git diff --name-only origin/main...HEAD` lists only those; anything
+  else → **STOP; never push it**, and say what strayed in. Code never rides a ticket commit.
+- **Message** `Plan: <one line>` · `Wrap: <one line>` · `Scope: <slug> — intake cut`.
+- **Push** `git push origin HEAD:main`. Rejected because `main` moved → `git pull --rebase
+  origin main` and push once more; still refused → report it and stop. Where a ruleset
+  guards `main`, the operator's admin bypass is what lets the push land — never
+  `--force`.
 
-**Landing it — verify the guard, then merge at once.** The session that opened the ticket
-PR merges it immediately, and nobody else does:
-
-1. `git diff --name-only origin/<base>...HEAD` lists only guarded paths. Anything else →
-   **STOP; never merge it**, and say what strayed in.
-2. `gh pr merge <n> --squash` — without waiting for Vercel or any other check: the diff is
-   ticket markdown, there is nothing for a check to catch. Where a ruleset requires checks,
-   `gh pr merge <n> --squash --admin` (the admin bypass exists for this; keep it).
-3. A PR that no longer merges cleanly (a run's close-out moved the same stub) is rebased on
-   `origin/<base>` and retried once; still refused → report it and stop.
-
-GitHub auto-merge is not used. Code, lane and promotion PRs stay the operator's to merge —
-the ticket PR is the only exception, because its guard proves it carries no code.
+No PR is opened for ticket state, and **no PR is ever merged by an agent** — code, lane and
+promotion PRs stay the operator's to merge. GitHub auto-merge is not used.
 
 ## Committing
 

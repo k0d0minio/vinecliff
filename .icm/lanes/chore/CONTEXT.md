@@ -85,8 +85,8 @@ Context budget: the Inputs table above is the budget (see `.icm/CONTEXT.md` → 
    "smoke-test, then squash-merge from GitHub". You do not merge lane PRs and you do not
    re-invoke the lane — the operator's merge click is the gate. A chore announces nothing (the reporting hook
    is for user-visible change — `_shared/project-rules.md` → Reporting); nothing watches the
-   merge. On a UAT repo the PR targets the UAT branch and reaches `main` with the batch's
-   promotion (`.icm/uat/CONTEXT.md`). The usage `end` line was written
+   merge. On a UAT repo the merge reaches UAT, and production with the batch's
+   promotion (`_shared/promotion.md`). The usage `end` line was written
    just before the close-out (above); nothing is written now. If you
    parked a finding in `.icm/intake/triage/` on the way and the folder now holds more than 60
    active stubs (`ls .icm/intake/triage/*.md | wc -l`; `intake/CONTEXT.md` → Triage → cap), say

@@ -35,16 +35,13 @@
   description: "Lane — refactor / dep bump / migration, no user-facing behaviour change"
 - name: "type:hotfix"
   color: "b60205"
-  description: "Lane — production is wrong now; PR into main, bypasses UAT, synced back after"
+  description: "Lane — production is wrong now; PR into main, shipped at once"
 - name: "type:handover"
   color: "0e8a16"
   description: "Lane — the handover pack at the end of an engagement"
-- name: "type:promote"
-  color: "5319e7"
-  description: "Lane — a signed-off UAT batch promoted to production; the operator merges"
 - name: "type:tickets"
   color: "ededed"
-  description: "Ticket PR — .icm/intake (and a Scope front) only, merged at once into the ticket base branch (D38)"
+  description: "Retired (D39 §8) — ticket state goes straight to main, no ticket PR; the label stays, unused"
 
 # --- Complexity — mirrors the spec header, and sets Release's code-review effort ------------------
 - name: "complexity:trivial"

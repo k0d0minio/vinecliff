@@ -14,12 +14,14 @@ non-draft so the **full gate and the product-app previews run at once**; that fi
 builds everything, and on an incident that cost is accepted (`_shared/ci.md` → the first ready
 push). The slug is `hotfix-<what>`, the label `type:hotfix`, and `notes.md` names the incident
 and the recovery. Fix-forward stays the default; a revert is *available*, prepared by
-`rollback.sh`, and still the operator's merge. **It bypasses UAT:** where the repo declares a UAT
-environment every other PR targets the UAT branch, but a hotfix targets `main` — production is
-wrong now — and `.icm/scripts/promote-uat.sh sync` afterwards carries the fix into UAT
-(`.icm/uat/CONTEXT.md`). That `sync` is **required**: the close-out rides this PR into `main`, but
-the repo's ticket base branch is the UAT branch (D38), so until `sync` runs the board still shows
-what this run retired as open.
+`rollback.sh`, and still the operator's merge. It targets `main` like every PR (D39). **On a UAT
+repo a hotfix promotes everything before it:** its merge reaches UAT and a Staged production
+build, and production moves only when the operator records the client's word on the whole batch
+(`promote.sh approve --by`) and publishes the Release — at once, for an incident. Tell the
+operator what else rides with the fix (`promote.sh status`); shipping a fix *around* unsigned
+work is not a tooling path (`_shared/promotion.md` → Hotfixes and dark merges). Where the bad
+deployment must leave production before the fix is promoted, Vercel's instant rollback
+(`rollback.sh`) is the stop-gap.
 
 ## Inputs (read only these)
 
@@ -80,8 +82,9 @@ Context budget: the Inputs table above is the budget (see `.icm/CONTEXT.md` → 
    back — that production is on the previous deployment until this PR merges. "Smoke-test, then
    squash-merge from GitHub." After their merge, Release's rule applies to a lane too: nothing
    watches production; the operator may run `deploy-status.sh --sha <merge-sha>` once, by hand.
-   On a UAT repo the stop message also names the required follow-up: `promote-uat.sh sync`
-   after the merge.
+   On a UAT repo the stop message also names the promotion: after the merge,
+   `promote.sh status` (what rides with the fix), `promote.sh approve --by "<who>"` on the
+   client's word, then the operator publishes the drafted Release.
 
 ## Outputs
 

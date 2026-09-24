@@ -158,8 +158,7 @@ everything except the source files you actually edit. Record overruns on a one-l
 10. **Bring the base branch in before the flip — a merge commit, never a rebase (D26).**
 
     ```bash
-    git fetch origin && git merge --no-edit origin/main     # every repo
-    git merge --no-edit origin/<uat-branch>                  # UAT repos only — the branch this PR targets (.icm/uat/CONTEXT.md)
+    git fetch origin && git merge --no-edit origin/main     # every repo — main is the only base (D39)
     ```
 
     Runs are cut for disjoint surfaces, but `main` has moved since this branch was cut, and

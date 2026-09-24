@@ -23,8 +23,8 @@
 #                         key `database.neon.api_key_env` names (decision D32). Needs `provider:
 #                         neon`, curl and jq — no psql, no docker. The branch's pooled connection
 #                         string is read back at `env` and never written anywhere in the repo. A
-#                         child of PRODUCTION, never of the UAT branch, so `db-env.sh reset-uat`
-#                         is never blocked by a run (uat/CONTEXT.md → The UAT database).
+#                         child of PRODUCTION, never of the UAT database, so `db-env.sh reset-uat`
+#                         is never blocked by a run (_shared/promotion.md → The UAT database).
 #   isolation: database   one MongoDB DATABASE per run — `run_<slug>` (lib/db-name.mjs normalises
 #                         it to MongoDB's rules: `-` → `_`, 63 bytes at most) on the ONE cluster the
 #                         variable `url_env` (default MONGODB_URI) points at, beside the repo's
@@ -253,7 +253,7 @@ case "$isolation" in
         verdict RELEASED ;;
       prove)
         [ "$(migrations_stamp)" = epoch ] || say "note: migrations.stamp is $(migrations_stamp) — the proof reads the epoch form (<13 digits>-<name>.$(migrations_extension)) a MongoDB runner writes"
-        [ -n "$base" ] || base="origin/$(pipeline_base_branch)"
+        [ -n "$base" ] || base="origin/main"
         git rev-parse --verify --quiet "${base}^{commit}" >/dev/null || die "base ref '$base' does not resolve — git fetch origin first, or pass --base <ref>"
         ext="$(migrations_extension)"; re="^[0-9]{13}-.+\.${ext//./\\.}$"
         own=(); on_base_all=()

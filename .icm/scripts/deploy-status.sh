@@ -24,13 +24,19 @@
 #
 # Read-only in the strong sense: GET only, the CLI never run, nothing written but stdout.
 #
-# --uat — where the repo declares a UAT environment (.icm/project.json → uat; .icm/uat/CONTEXT.md)
-# and the run merged into the UAT branch, Release reads THAT deployment once instead of production:
-# the newest deployment of the merge commit whose git ref is the UAT branch, for each product
-# project (quiet projects do not deploy on a working branch and are skipped, named). The record
-# line is `- uat: READY on <sha> — <project> dpl_… · <uat.url>`; no previous-deployment id is
-# looked up (there is nothing to roll back — a broken UAT build is a bug lane into the UAT branch,
-# and the address keeps serving the last READY deployment). Production is not read.
+# --uat — where the repo declares a UAT environment (.icm/project.json → uat: {target, url};
+# `.icm/_shared/promotion.md`; decision D39), Release reads the UAT environment's deployment of the
+# merge commit once: for each product project, the deployment of the SHA whose custom environment
+# is `uat.target` (the list item's `customEnvironment` — matched on its slug, or on the id
+# `GET /v9/projects/<name>/custom-environments` gives for the slug; which of the two Vercel's v6
+# list exposes is proven on the first real UAT repo, so both are read). Quiet projects carry no
+# UAT environment and are skipped, named. The record line is `- uat: READY on <sha> — <project>
+# dpl_… · <uat.url>`; no previous-deployment id is looked up (a broken UAT build is a bug lane,
+# and the address keeps serving its last READY deployment).
+#
+# Without --uat on a UAT repo, the read is the production BUILD of the SHA: a Staged deployment
+# is READY and not yet serving — whether it is Current is `promote.sh status`'s line, and the
+# release workflow reads this once after it promoted.
 #
 # Usage:
 #   .icm/scripts/deploy-status.sh <slug> [--timeout <seconds>] [--interval <seconds>] [--no-wait] [--uat]
@@ -77,10 +83,10 @@ source "$here/lib/project.sh"
 # shellcheck source=lib/vercel.sh
 source "$here/lib/vercel.sh"
 
-label="production"; ub=""; uat_suffix=""
+label="production"; ut=""; uat_suffix=""
 if [ "$uat" -eq 1 ]; then
-  uat_declared || die "--uat needs a UAT environment declared in .icm/project.json (uat.branch) — /setup declares one; without one Release reads production"
-  label="uat"; ub="$(uat_branch)"; [ -z "$(uat_url)" ] || uat_suffix=" · $(uat_url)"
+  uat_declared || die "--uat needs a UAT environment declared in .icm/project.json (uat.target + uat.url) — /setup declares one; without one Release reads production"
+  label="uat"; ut="$(uat_target)"; uat_suffix=" · $(uat_url)"
 fi
 if ! vercel_declared; then
   echo "$label: not declared (no deploy block)"
@@ -111,13 +117,26 @@ if [ "${#sha}" -lt 40 ]; then
   [ -z "$full" ] || sha="$full"
 fi
 
-# The deployment of $sha for <name>, newest first — `--uat` prefers the UAT branch's own. The sha
-# filter first (full SHA only); else the newest deployments, matched on meta.githubCommitSha.
+# The deployment of $sha for <name>, newest first — under `--uat`, only the one whose custom
+# environment is uat.target (by slug, or by the environment's id). The sha filter first (full SHA
+# only); else the newest deployments, matched on meta.githubCommitSha.
 pick='sort_by(-.created) | first // empty'
-[ "$uat" -eq 0 ] || pick='([.[] | select((.meta.githubCommitRef // "") == $b)] | sort_by(-.created) | first) // (sort_by(-.created) | first) // empty'
+[ "$uat" -eq 0 ] || pick='[.[] | select(((.customEnvironment.slug // "") == $t) or ($id != "" and ((.customEnvironment.id // "") == $id)) or ((.target // "") == $t))] | sort_by(-.created) | first // empty'
+declare -A env_ids=()
+uat_env_id() { # <name> → the custom environment's id for uat.target, '' when unknown
+  local resp
+  if [ -z "${env_ids[$1]+x}" ]; then
+    env_ids[$1]=""
+    resp="$(vercel_get "/v9/projects/$1/custom-environments")" || true
+    if [ "$(_vercel_code "$resp")" = "200" ]; then
+      env_ids[$1]="$(_vercel_body "$resp" | jq -r --arg t "$ut" '[(.environments // [])[] | select(.slug == $t)] | first | .id // empty')"
+    fi
+  fi
+  printf '%s' "${env_ids[$1]}"
+}
 find_deployment() { # <name>
-  local name="$1" deps="" tgt=()
-  [ "$uat" -eq 1 ] || tgt=(--target production)
+  local name="$1" deps="" tgt=() eid=""
+  if [ "$uat" -eq 1 ]; then eid="$(uat_env_id "$name")"; else tgt=(--target production); fi
   if [ "${#sha}" -eq 40 ]; then
     deps="$(vercel_deployments "$name" ${tgt[@]+"${tgt[@]}"} --sha "$sha" --limit 10)"
   fi
@@ -125,7 +144,7 @@ find_deployment() { # <name>
     deps="$(vercel_deployments "$name" ${tgt[@]+"${tgt[@]}"} --limit 20 \
       | jq -c --arg s "$sha" '[.[] | select((.meta.githubCommitSha // "") | startswith($s))]')"
   fi
-  printf '%s' "$deps" | jq -c --arg b "$ub" "$pick"
+  printf '%s' "$deps" | jq -c --arg t "$ut" --arg id "$eid" "$pick"
 }
 
 # --- one read per project, bounded -----------------------------------------------------------------------
@@ -138,13 +157,12 @@ for pj in "${projects[@]}"; do
   name="$(printf '%s' "$pj" | jq -r '.name')"
   class="$(printf '%s' "$pj" | jq -r '.class // "product"')"
   if [ "$uat" -eq 1 ] && [ "$class" = "quiet" ]; then
-    lines+=("$name ($class): skipped — a quiet project builds on the default branch only, never on the UAT branch")
+    lines+=("$name ($class): skipped — a quiet project carries no UAT environment")
     continue
   fi
   state=""; dpl_id=""; dpl_url=""; created=""
   while :; do
-    # Any target under --uat: the UAT branch deploys as a preview deployment (or a custom
-    # environment) — the branch's own deployment of this SHA first, the newest of the SHA otherwise.
+    # Under --uat: the custom environment's deployment of this SHA, built from main on the merge.
     dpl="$(find_deployment "$name")"
     if [ -n "$dpl" ]; then
       state="$(printf '%s' "$dpl" | jq -r '.state // .readyState // "UNKNOWN"')"
@@ -176,7 +194,7 @@ for pj in "${projects[@]}"; do
     SKIPPED)        if [ "$uat" -eq 1 ]; then lines+=("$name ($class): SKIPPED — ignore step, the UAT address keeps its last READY — canceled ${dpl_id}")
                     else lines+=("$name ($class): SKIPPED — ignore step, live ${prev_id:-its last READY} — canceled ${dpl_id}"); fi
                     ignored=1 ;;
-    ERROR|CANCELED) if [ "$uat" -eq 1 ]; then lines+=("$name ($class): $state — ${dpl_id} — the UAT address keeps its last READY deployment; fix it through a bug lane into the UAT branch")
+    ERROR|CANCELED) if [ "$uat" -eq 1 ]; then lines+=("$name ($class): $state — ${dpl_id} — the UAT address keeps its last READY deployment; fix it through a bug lane")
                     else lines+=("$name ($class): $state — ${dpl_id}${prev_id:+ (prev ${prev_id})} — see the hotfix lane (rollback.sh --sha $sha --vercel names the recovery)"); fi
                     errored="${errored:+$errored }$name"; verdict="ERROR" ;;
     "")             lines+=("$name ($class): PENDING — not created — no $label deployment of ${sha:0:7} yet"); [ "$verdict" = "ERROR" ] || verdict="PENDING" ;;

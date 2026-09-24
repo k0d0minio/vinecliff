@@ -70,10 +70,12 @@
 #                   Neon), api_key_env — the NAME of the variable holding a Neon API key (default
 #                   NEON_API_KEY), production_branch (default main — never written by a script),
 #                   previews "none" (default) | "vercel" (the Vercel integration creates
-#                   `preview/<git-branch>` per preview deployment and injects its variables; the
-#                   UAT git branch's database is then `preview/<uat.branch>`), uat_branch — an
-#                   explicit override of that name, normally empty}. lib/neon.sh, db-branch.sh,
-#                   db-env.sh, setup.sh, env-check.sh and the neon-cleanup workflow read it.
+#                   `preview/<git-branch>` per preview deployment and injects its variables),
+#                   uat_branch — the NAMED Neon branch behind the UAT environment (D39 (3)): a
+#                   persistent child of production the operator creates, its connection set on
+#                   the custom environment's variables; required when uat is declared}.
+#                   lib/neon.sh, db-branch.sh, db-env.sh, setup.sh, env-check.sh and the
+#                   neon-cleanup workflow read it.
 #                   `provider` "mongodb" (D35) — every pipeline database on the ONE cluster the
 #                   repo already uses: `url_env` then defaults to MONGODB_URI (the cluster URI,
 #                   never a database); `isolation` "database" gives each run `run_<slug>` on it;
@@ -84,7 +86,9 @@
 #                   migrate command takes `up [<name>]` and `down <name>`), migrations_collection
 #                   — where the runner records applied migrations (default migrations), previews
 #                   "none" (default) | "branch" (the app derives `preview_<branch>` at runtime
-#                   behind MONGODB_PREVIEW_PER_BRANCH=1 — lib/db-name.mjs), limits {databases,
+#                   behind MONGODB_PREVIEW_PER_BRANCH=1 — lib/db-name.mjs), uat_name — the
+#                   database behind the UAT environment, set on its variables by the operator
+#                   (required when uat is declared; never dropped but by reset-uat), limits {databases,
 #                   collections} — the cluster's caps (default 100 and 500, the shared Atlas
 #                   tiers'; 0 = uncapped) and name_bytes — the longest database name it takes
 #                   (default 38, the shared Atlas tiers'; 63 on a dedicated cluster; read by
@@ -98,16 +102,17 @@
 #                   — the after-handover line the deal agreed. setup.sh's Support section checks
 #                   the fail-safe page and the Sentry key exist when tier is basic or retainer;
 #                   Release step 4 stops (class 3) when they do not.
-#   uat             object {branch, url} — OPTIONAL: the persistent client UAT environment
-#                   (decision D31; `.icm/uat/CONTEXT.md`). Declared only by `/setup`, never
-#                   seeded filled. `branch` is the long-lived integration branch every run's PR
-#                   targets instead of main once declared (`uat` by convention); `url` is the one
-#                   fixed address the client opens — a domain assigned to that branch in Vercel,
-#                   or the branch alias — the same every day, never a per-batch preview. Absent,
-#                   or an empty `branch`, reads as "not declared": every run merges into main and
-#                   ships on the merge, exactly as before. `promote-uat.sh` and `client-status.sh`
-#                   read it; `new-run.sh`, `close-out.sh`, `deploy-status.sh --uat` and
-#                   `check-migrations.sh` change their base branch on it.
+#   uat             object {target, url} — OPTIONAL: the client's UAT environment (decision D39;
+#                   `.icm/_shared/promotion.md`). Declared only by `/setup`, never seeded filled.
+#                   `target` is the slug of a Vercel CUSTOM ENVIRONMENT on the product project(s)
+#                   (Pro; one per project), deployed from `main` on every merge; `url` is the
+#                   domain attached to that environment — the one fixed address the client opens.
+#                   Both, or neither: absent or both empty reads as "not declared" — every merge
+#                   is the production release, exactly as before. Declared, production does not
+#                   follow `main`: every merge is a Staged production deployment, promoted when
+#                   the operator publishes the Release `promote.sh approve` drafted. There is no
+#                   UAT branch — `main` is the only long-lived branch in every repo; a
+#                   `uat.branch` key is the retired D31 model and setup.sh fails it.
 #   health_endpoint the URL (or an array of URLs) that answers 200 when production is up —
 #                   health-check.sh GETs it once after the merge (Release step 9a). A project
 #                   may carry its own as deploy.projects[].health_endpoint instead, or as well.
@@ -147,35 +152,30 @@
 #                                         the mongodb block's scalars with their defaults
 #                                         (MONGODB_DATABASE_NAME · '' · '' · '' · '' · migrations
 #                                         · none · 100 · 500).
-#   mongo_uat_database                    preview_<uat.branch> (normalised by lib/db-name.mjs)
-#                                         when uat is declared and previews is branch, else ''.
+#   mongo_uat_database                    database.mongodb.uat_name when uat is declared, else ''.
 #   neon_project_id · neon_api_key_env · neon_production_branch · neon_previews
 #                                         the neon block's scalars with their defaults ('' · NEON_API_KEY
 #                                         · main · none).
-#   neon_uat_branch                       the Neon branch behind the UAT git branch: neon.uat_branch
-#                                         when set, else `preview/<uat.branch>` when uat is declared
-#                                         and previews is vercel, else '' (no UAT database).
+#   neon_uat_branch                       database.neon.uat_branch when uat is declared, else ''
+#                                         (no UAT database). Never derived from a git branch.
 #   security_audit_command                the audit override, or nothing.
 #   support_tier · support_failsafe · support_sentry_env
 #                                         the support block's scalars with their defaults.
-#   uat_declared                          returns 0 when uat.branch is set — the repo has a
-#                                         persistent client UAT environment.
-#   uat_branch · uat_url                  the uat block's scalars ('' when not declared).
-#   pipeline_base_branch                  the branch a run's PR targets and a run branch is cut
-#                                         from: uat.branch when declared, else main. A hotfix
-#                                         ignores it (production is wrong now — lanes/hotfix).
+#   uat_declared                          returns 0 when uat.target AND uat.url are set — the repo
+#                                         has a UAT environment and production is promoted, not
+#                                         merged (D39). One of the two alone is not a declaration
+#                                         (setup.sh fails it).
+#   uat_target · uat_url                  the uat block's scalars ('' when not declared).
 #   health_endpoints                      one URL per line: the top-level health_endpoint (string
 #                                         or array), then every deploy.projects[].health_endpoint,
 #                                         in that order, de-duplicated; nothing when none declared.
 #   pipeline_lanes                        the lane vocabulary, space-separated — the one list
 #                                         new-run.sh, resolve-run.sh, project-labels.sh,
 #                                         close-out.sh, validate-intake.sh and triage-report.sh
-#                                         read (bug tweak chore hotfix handover promote). Not a
+#                                         read (bug tweak chore hotfix handover). Not a
 #                                         manifest key: the lanes are the template's, not the
-#                                         repo's. `promote` is the one lane with no contract
-#                                         folder: promote-uat.sh runs it end to end (a UAT
-#                                         batch's promotion PR into main), .icm/uat/CONTEXT.md
-#                                         is its contract, and it never starts from a stub.
+#                                         repo's. A promotion is not a lane and not a PR — it is
+#                                         a published Release (_shared/promotion.md).
 #   is_lane <word>                        returns 0 when <word> is one of pipeline_lanes.
 
 declare -F die >/dev/null 2>&1 || die() { echo "error: $*" >&2; exit 1; }
@@ -300,10 +300,8 @@ neon_previews() {
   case "$v" in vercel) echo vercel ;; *) echo none ;; esac
 }
 neon_uat_branch() {
-  local v; v="$(project_field '.database.neon.uat_branch' '')"
-  if [ -n "$v" ]; then printf '%s' "$v"
-  elif uat_declared && [ "$(neon_previews)" = "vercel" ]; then printf 'preview/%s' "$(uat_branch)"
-  fi
+  uat_declared || return 0
+  project_field '.database.neon.uat_branch' ''
 }
 
 # --- database: the MongoDB block (D35) ---------------------------------------------------------------
@@ -333,9 +331,8 @@ mongo_limit_name_bytes() {
   case "$v" in ''|*[!0-9]*) echo 38 ;; *) echo "$v" ;; esac
 }
 mongo_uat_database() {
-  { uat_declared && [ "$(mongo_previews)" = branch ]; } || return 0
-  command -v node >/dev/null 2>&1 || return 0
-  node "$(dirname "${BASH_SOURCE[0]}")/db-name.mjs" preview "$(uat_branch)"
+  uat_declared || return 0
+  project_field '.database.mongodb.uat_name' ''
 }
 
 # --- security ----------------------------------------------------------------------------------------
@@ -349,15 +346,12 @@ support_failsafe()   { project_field '.support.failsafe_page' ''; }
 support_sentry_env() { project_field '.support.monitoring.sentry_dsn_env' 'SENTRY_DSN'; }
 
 # --- uat ---------------------------------------------------------------------------------------------
-# The persistent client UAT environment, where the repo declares one (D31). Not declared → every
-# helper answers as the pipeline always did: base branch main, no batch, no promotion.
+# The client's UAT environment, where the repo declares one (D39): a Vercel custom environment
+# deployed from main, not a branch. Not declared → every merge is the production release.
 
-uat_declared() { project_has '.uat.branch'; }
-uat_branch()   { project_field '.uat.branch' ''; }
+uat_declared() { project_has '.uat.target' && project_has '.uat.url'; }
+uat_target()   { project_field '.uat.target' ''; }
 uat_url()      { project_field '.uat.url' ''; }
-pipeline_base_branch() {
-  if uat_declared; then uat_branch; else printf '%s' "main"; fi
-}
 
 # --- health ------------------------------------------------------------------------------------------
 
@@ -373,10 +367,9 @@ health_endpoints() {
 
 # --- lanes -------------------------------------------------------------------------------------------
 # The one vocabulary list. bug/tweak/chore open draft; hotfix opens READY (an incident wants the
-# full gate and the previews at once); handover is the deal's last lane (lanes/handover/CONTEXT.md);
-# promote is script-run — promote-uat.sh opens a UAT batch's promotion PR into main, READY
-# (.icm/uat/CONTEXT.md) — and is never picked by hand or from a stub.
-pipeline_lanes() { printf '%s' "bug tweak chore hotfix handover promote"; }
+# full gate and the previews at once); handover is the deal's last lane (lanes/handover/CONTEXT.md).
+# A promotion is not a lane: it is a Release the operator publishes (_shared/promotion.md).
+pipeline_lanes() { printf '%s' "bug tweak chore hotfix handover"; }
 is_lane() {
   local w
   for w in $(pipeline_lanes); do [ "$w" = "$1" ] && return 0; done

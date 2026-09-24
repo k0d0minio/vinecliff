@@ -31,13 +31,10 @@
 # prints `[WARN] overlaps <slug> on <path>` per shared surface (decision D26) — a warning for the
 # operator, never a refusal; the cut is where overlap is avoided, and Build merges main early.
 #
-# THE BASE BRANCH is the pipeline's, not the caller's: `main`, or the UAT branch where the repo
-# declares a persistent client UAT environment (`.icm/project.json` → uat.branch; lib/project.sh
-# → pipeline_base_branch; .icm/uat/CONTEXT.md). A hotfix targets `main` regardless — production
-# is wrong now. `--base` overrides either. When the base is the UAT branch this script also brings
-# origin/main into the run branch before anything is committed (a hotfix or a knowledge-lane
-# change lands on main first; the intake cut does not — it lands on the ticket base branch, the
-# UAT branch, through a ticket PR: D38), and warns when the branch was not cut from the UAT branch.
+# THE BASE BRANCH is `main` — the only long-lived branch in every repo (decision D39): every run,
+# every lane and every hotfix targets it, UAT or not. A repo with a UAT environment differs after
+# the merge, not before it (`.icm/_shared/promotion.md`). `--base` overrides it for the odd case a
+# human names; nothing in the pipeline passes it.
 #
 # --dry-run prints the PR body this call would open (the spine body straight from
 # project-body.sh, or the lane body) and creates NOTHING: no branch, no commit, no push, no PR,
@@ -106,12 +103,8 @@ source "$here/lib/project.sh"
 if [ -n "$lane" ] && ! is_lane "$lane"; then die "--lane must be one of: $(pipeline_lanes | tr ' ' '|'), got: $lane"; fi
 # A hotfix opens ready — the whole point of the lane is one full gate now (lib/project.sh → lanes).
 [ "$lane" = "hotfix" ] && ready_flag=1
-# The base branch: --base wins; else the pipeline's (main, or the UAT branch where one is
-# declared); a hotfix goes to main regardless — production is wrong now (lanes/hotfix/CONTEXT.md).
-if [ -z "$base" ]; then
-  base="$(pipeline_base_branch)"
-  [ "$lane" = "hotfix" ] && base="main"
-fi
+# The base branch: --base wins; else main — the one long-lived branch (D39).
+[ -n "$base" ] || base="main"
 # A lane may consume a triage stub (the parking lane it exists to drain) — but never a scope-epic
 # stub, which must go through Define so the spec and the Spec-approved gate exist.
 if [ -n "$lane" ] && [ -n "$stub" ]; then
@@ -175,36 +168,6 @@ if [ "$branch" = "main" ] || [ "$branch" = "master" ] || [ "$branch" = "HEAD" ] 
   fi
 else
   echo "on $branch — using it as the run branch (harness-named branches are accepted and recorded in run.md)" >&2
-fi
-
-# --- UAT repos: the run branch carries main (.icm/uat/CONTEXT.md) ----------------------------------------
-# Where the PR targets the UAT branch, a hotfix and a knowledge-lane change (both merge into main)
-# are on main and not yet on the UAT branch until promote-uat.sh sync runs. Bring origin/main into
-# this run branch before anything is committed, so the run's PR carries main's newer commits into
-# UAT. The stub the run consumes is already on the UAT branch — the ticket base branch, where
-# Scope's ticket PR landed it (D38) — so it arrives with the cut from origin/<uat>, not from main. A conflict is the operator's — aborted and named, never
-# resolved by guesswork. Skipped on a dry run and when the base is main (nothing to bring in).
-if [ "$dry_run" -eq 0 ] && uat_declared && [ "$base" = "$(uat_branch)" ]; then
-  if GIT_TERMINAL_PROMPT=0 git_c fetch origin --quiet >/dev/null 2>&1; then
-    if git_c rev-parse --verify -q "origin/$base" >/dev/null 2>&1 && ! git_c merge-base --is-ancestor "origin/$base" HEAD 2>/dev/null; then
-      echo "[WARN] $branch does not contain origin/$base's tip — this run is not built on the current UAT batch; cut run branches from origin/$base (.icm/uat/CONTEXT.md)" >&2
-    fi
-    if git_c rev-parse --verify -q origin/main >/dev/null 2>&1 && ! git_c merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
-      if git_c merge --no-edit origin/main >/dev/null 2>&1; then
-        echo "brought origin/main into $branch — the UAT branch was behind main (a hotfix or a knowledge-lane change travels with this run; promote-uat.sh sync is still owed)" >&2
-      elif [ "$(git_c diff --name-only --diff-filter=U 2>/dev/null)" = ".icm/uat/batch.json" ] \
-           && git_c checkout --ours -- .icm/uat/batch.json >/dev/null 2>&1 && git_c add .icm/uat/batch.json && git_c commit -q --no-edit >/dev/null 2>&1; then
-        # The one file main and the UAT branch both write: main's copy is a promotion's snapshot,
-        # the UAT branch's is the live batch — keep the UAT branch's (promote-uat.sh does the same).
-        echo "brought origin/main into $branch — .icm/uat/batch.json kept from the UAT branch (main's copy is a promotion's snapshot)" >&2
-      else
-        git_c merge --abort >/dev/null 2>&1 || true
-        die "origin/main does not merge cleanly into $branch — bring main into the UAT branch first (.icm/scripts/promote-uat.sh sync; a conflict there is the operator's to resolve), then re-run"
-      fi
-    fi
-  else
-    echo "[WARN] git fetch origin failed — could not check whether main has moved past the UAT branch" >&2
-  fi
 fi
 
 # --- PR title + body -------------------------------------------------------------------------------

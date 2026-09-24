@@ -78,12 +78,21 @@ gives the run a database of its own. Both headers are the specification.
 
 ## Where a preview or UAT applies the migration
 
-On a Neon repo with `database.neon.previews: vercel`, every preview deployment — and the UAT
-branch's — has a database of its own (`preview/<git-branch>`, a child of production) and applies
-the branch's migrations **at build**, because the repo's build command runs the migrate step
-(`_shared/project-rules.md` → The factory → The environments' databases says so, or says it does
-not). A preview whose build does not migrate shows production's shape without this run's change;
-say so in the stop message rather than assuming the preview proved the migration.
+On a Neon repo with `database.neon.previews: vercel`, every preview deployment has a database of
+its own (`preview/<git-branch>`, a child of production) and applies the branch's migrations **at
+build**, because the repo's build command runs the migrate step (`_shared/project-rules.md` → The
+factory → The environments' databases says so, or says it does not). A preview whose build does
+not migrate shows production's shape without this run's change; say so in the stop message rather
+than assuming the preview proved the migration.
+
+On a UAT repo (`_shared/promotion.md`) the merge into `main` deploys the UAT environment, whose
+build migrates the **named** UAT database (`database.neon.uat_branch` / `database.mongodb.uat_name`)
+the same way — inside a custom environment `VERCEL_ENV` is `preview`. **Production is migrated at
+the promotion, not on the merge:** the release workflow calls the repo's `db-migrate.yml` when the
+operator publishes the Release, before it promotes. So a migration merged today is live on UAT
+today and reaches production only with its batch — schema and code move at the same promotion,
+migration first. A failed production migration stops the release before the promote (the
+`- migrations:` line and the operator's recovery, as below).
 
 On a MongoDB repo with `database.mongodb.previews: branch`, every preview reads its own
 `preview_<branch>` — the app derives the name at runtime through `.icm/scripts/lib/db-name.mjs`

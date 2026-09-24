@@ -14,9 +14,10 @@
 #   previews     `preview_<branch>` (lib/db-name.mjs) where mongodb.previews is `branch`: the app
 #                derives the name at runtime, the repo's preview-migrate workflow migrates and seeds
 #                it on each PR push, the reference mongodb-cleanup.yaml drops it when the PR closes.
-#   UAT          `preview_<uat.branch>`, where uat is declared: the same derivation, a long-lived
-#                branch. `reset-uat --apply` drops it and re-makes it with the repo's seed and
-#                migrate commands — there is no copy of production to reset from, by design.
+#   UAT          `database.mongodb.uat_name`, where uat is declared (D39): a long-lived database the
+#                operator names in /setup and sets on the UAT custom environment's variables.
+#                `reset-uat --apply` drops it and re-makes it with the repo's seed and migrate
+#                commands — there is no copy of production to reset from, by design.
 #   runs         `run_<slug>`, made by db-branch.sh up (isolation: database).
 #   status  the databases by role — production, shared, UAT, preview_* and run_* (each live or
 #           not: a git branch on origin, a run folder), and every other database by name (not the
@@ -30,11 +31,12 @@
 # The topology, one home per fact (D24 — the names in project.json, the state in Neon):
 #   production   the project's production branch (database.neon.production_branch, `main` by
 #                default) — NEVER written, deleted or reset by anything in the pipeline.
-#   UAT          where the repo declares uat.branch and database.neon.previews is `vercel`, the Neon
-#                branch `preview/<uat.branch>` — CREATED BY THE VERCEL INTEGRATION on the UAT git
-#                branch's first deployment, a copy of production at that moment, persistent as long
-#                as the branch deploys. Nothing here creates it; `reset-uat` brings it back to
-#                production's latest state on the operator's call (uat/CONTEXT.md → The UAT database).
+#   UAT          where the repo declares uat (D39), the NAMED Neon branch `database.neon.uat_branch`
+#                — a persistent child of production the OPERATOR creates once and whose connection
+#                strings the operator sets on the UAT custom environment's variables (the Vercel
+#                integration is not connected to that environment). Nothing here creates it;
+#                `reset-uat` brings it back to production's latest state on the operator's call
+#                (_shared/promotion.md → The UAT database).
 #   previews     `preview/<git-branch>`, one per preview deployment, created and wired by the Vercel
 #                integration (its Preview-branching toggle — an operator act `init` lists). The
 #                reference workflow .github/workflows/neon-cleanup.yaml deletes one when its PR
@@ -53,8 +55,9 @@
 #                          RESULT: NEON <n> branch(es) · production <name> · uat <state> · previews <n> · runs <n>
 #   init         prints the one-time acts only the operator can perform — the API key and where it
 #                lives, the integration's Preview-branching toggle, the build command that applies
-#                migrations, protecting the production branch, the cleanup workflow — and, with the
-#                key in reach, reads the project once to say which are done. Writes nothing.
+#                migrations, protecting the production branch, the cleanup workflow, and (UAT) the
+#                named branch and its variables on the custom environment — and, with the key in
+#                reach, reads the project once to say which are done. Writes nothing.
 #                                                                                       RESULT: INIT
 #   reset-uat [--apply]
 #                reset the UAT branch from its parent (production): the client's test data is
@@ -68,7 +71,7 @@
 #                by default.                                RESULT: DRY-RUN <n> | PRUNED <n> | UNCHANGED
 #
 # What never happens here: production is never written; the UAT branch is never created or deleted
-# (the integration owns its birth; a reset is the one act, and only on --apply); no branch of a
+# (the operator owns its birth; a reset is the one act, and only on --apply); no branch of a
 # name the pipeline did not give is touched; nothing is scheduled; nothing watches. The key's value
 # never reaches argv or stdout.
 #
@@ -101,7 +104,7 @@ if [ "$(database_provider)" = mongodb ]; then
   url_env="$(database_url_env)"; prod="$(mongo_production_name)"; shared="$(mongo_preview_name)"; previews="$(mongo_previews)"
   mongo() { node "$here/lib/mongo.mjs" "$@"; }
   names() { node "$here/lib/db-name.mjs" "$@"; }
-  uat_db=""; command -v node >/dev/null 2>&1 && uat_db="$(mongo_uat_database)"
+  uat_db="$(mongo_uat_database)"
   head_line="MongoDB cluster via \$$url_env ($( [ -n "${!url_env:-}" ] && echo "set here" || echo "unset here")) · production ${prod:-<undeclared>} · shared preview ${shared:-<undeclared>} · previews $previews${uat_db:+ · UAT $uat_db}"
 
   if [ "$verb" = init ]; then
@@ -124,6 +127,14 @@ if [ "$(database_provider)" = mongodb ]; then
       echo "  [LAST] set MONGODB_PREVIEW_PER_BRANCH=1 once on the Preview target — and as a repository variable of the same name where the repo's workflows read it (a workflow cannot read Vercel's) — the switch; unsetting it is the whole revert (every preview back on $shared)"
     else
       echo "  [INFO] database.mongodb.previews is none — every preview uses the shared preview database $shared, as before; previews: branch gives each its own"
+    fi
+    if uat_declared; then
+      if [ -n "$uat_db" ]; then
+        echo "  [TODO] set $(mongo_name_env)=$uat_db (and the non-production cluster's URI as \$$url_env) on the UAT custom environment '$(uat_target)' only — MONGODB_PREVIEW_PER_BRANCH stays unset there, so the app reads the name as given (D39 (3))"
+        echo "  [TODO] migrate and seed $uat_db on each merge to main — the repo's migrate workflow on push to main (MONGODB name = $uat_db); db-env.sh reset-uat --apply re-makes it from nothing"
+      else
+        echo "  [TODO] uat is declared but database.mongodb.uat_name is empty — name the UAT database (/setup; 'uat' by convention)"
+      fi
     fi
     if [ -n "${!url_env:-}" ] && command -v node >/dev/null 2>&1; then
       if c="$(mongo check 2>&1)"; then echo "  [OK]   the cluster answers: $c"; else echo "  [WARN] the cluster did not answer: $c"; fi
@@ -168,10 +179,10 @@ if [ "$(database_provider)" = mongodb ]; then
     echo "RESULT: MONGODB $total database(s) · production $ps · shared $ss · uat $us · previews $np · runs $nr"
     exit 0 ;;
   reset-uat)
-    [ -n "$uat_db" ] || { echo "no UAT database: uat.branch is not declared, or database.mongodb.previews is not branch — nothing to reset"; echo "RESULT: SKIP"; exit 0; }
+    [ -n "$uat_db" ] || { echo "no UAT database: uat is not declared, or database.mongodb.uat_name is empty — nothing to reset"; echo "RESULT: SKIP"; exit 0; }
     { [ -n "$(mongo_seed_command)" ] && [ -n "$(mongo_migrate_command)" ]; } || die "database.mongodb.seed_command and migrate_command must both be declared"
     if [ "$apply" -eq 0 ]; then
-      echo "would: drop $uat_db and re-make it with \`migrate up\` and the repo's seed command — the client's test data is gone, the shape is the UAT branch's migrations on a seeded database (nothing is copied from production)"
+      echo "would: drop $uat_db and re-make it with \`migrate up\` and the repo's seed command — the client's test data is gone, the shape is main's migrations on a seeded database (nothing is copied from production)"
       echo "RESULT: DRY-RUN"; exit 0
     fi
     mongo drop "$uat_db" --uat || exit 1
@@ -228,9 +239,17 @@ if [ "$verb" = "init" ]; then
     echo "  [TODO] the build must apply the branch's migrations, or a preview's (and UAT's) database is production's shape without them: run the repo's migrate step before the build — the build command in Vercel (Settings → Build and Deployment), or a vercel-build script — and record the choice in _shared/project-rules.md → The factory → The run's database"
     if [ -f .github/workflows/neon-cleanup.yaml ] || [ -f .github/workflows/neon-cleanup.yml ]; then echo "  [OK]   .github/workflows/neon-cleanup.yaml present — deletes preview/<branch> and run/<slug> when a PR closes"
     else echo "  [TODO] seed the reference cleanup workflow (setup.sh --fix --template <path>, or copy github-pipeline/workflows/neon-cleanup.yaml from the template) — the Vercel-managed integration otherwise keeps a preview branch until the deployment expires, which is months"; fi
-    [ -n "$uat_name" ] && echo "  [INFO] the UAT database is the Neon branch $uat_name — the integration creates it on the UAT git branch's first deployment; db-env.sh status reads it, db-env.sh reset-uat --apply resets it from production"
   else
-    echo "  [INFO] database.neon.previews is none — previews and the UAT branch share the Preview environment's variables; set it to vercel and enable the integration's Preview branching for a database per preview"
+    echo "  [INFO] database.neon.previews is none — previews share the Preview environment's variables; set it to vercel and enable the integration's Preview branching for a database per preview"
+  fi
+  if uat_declared; then
+    if [ -n "$uat_name" ]; then
+      echo "  [TODO] create the UAT database once: Neon Console → Branches → New branch '$uat_name' from $prod_name (no expiry) — a persistent child of production (D39 (3))"
+      echo "  [TODO] set its connection strings on the UAT custom environment '$(uat_target)' only — the variables the app reads (\$$(database_url_env) and its unpooled twin, if any):   vercel env add $(database_url_env) $(uat_target)   (value from stdin; Neon Console → the branch → Connect). Never connect the Neon integration to that environment: it would branch per deployment"
+      echo "  [TODO] the UAT build migrates it like a preview's: inside the custom environment VERCEL_ENV is preview and VERCEL_TARGET_ENV is '$(uat_target)', so the build's migrate step reaches $uat_name on every merge to main"
+    else
+      echo "  [TODO] uat is declared but database.neon.uat_branch is empty — name the UAT database (/setup; 'uat' by convention)"
+    fi
   fi
   echo "  [TODO] protect the production branch in Neon (Branches → $prod_name → Protect): a protected branch cannot be deleted or reset, and its children get credentials of their own"
   if neon_ready && neon_load_branches; then
@@ -244,10 +263,10 @@ if [ "$verb" = "init" ]; then
     if [ "$previews" = "vercel" ]; then
       np="$(printf '%s' "$bj" | jq '[.[] | select(.name | startswith("preview/"))] | length')"
       if [ "$np" -gt 0 ]; then echo "  [OK]   preview branching is live: $np preview/* branch(es)"; else echo "  [..]   no preview/* branch yet — after the toggle, the next preview deployment creates the first"; fi
-      if [ -n "$uat_name" ]; then
-        if [ -n "$(printf '%s' "$bj" | jq -r --arg n "$uat_name" '.[] | select(.name == $n) | .id')" ]; then echo "  [OK]   UAT branch $uat_name exists"
-        else echo "  [..]   UAT branch $uat_name not created yet — it arrives with the UAT git branch's first deployment"; fi
-      fi
+    fi
+    if [ -n "$uat_name" ]; then
+      if [ -n "$(printf '%s' "$bj" | jq -r --arg n "$uat_name" '.[] | select(.name == $n) | .id')" ]; then echo "  [OK]   UAT branch $uat_name exists"
+      else echo "  [..]   UAT branch $uat_name not created yet — the operator creates it from $prod_name (above)"; fi
     fi
   fi
   echo "RESULT: INIT"; exit 0
@@ -284,7 +303,7 @@ status)
       echo "uat:        $uat_name ($uat_id) — parent $(printf '%s' "$bj" | jq -r --arg id "$uat_id" '[.[] | select(.id == $id)] | first | .parent_id // "?"'), created $(printf '%s' "$bj" | jq -r --arg id "$uat_id" '[.[] | select(.id == $id)] | first | .created_at // "?"'); children: $(children_of "$uat_id") (a reset needs 0)"
     else
       uat_state="not yet"
-      echo "uat:        $uat_name — not created yet; the integration creates it on the UAT git branch's first deployment (promote-uat.sh init → push the branch once)"
+      echo "uat:        $uat_name — not created yet; the operator creates it from $prod_name and sets it on the '$(uat_target)' environment (db-env.sh init)"
     fi
   fi
   np="$(printf '%s' "$bj" | jq '[.[] | select(.name | startswith("preview/"))] | length')"
@@ -315,8 +334,8 @@ status)
   exit 0 ;;
 
 reset-uat)
-  [ -n "$uat_name" ] || { echo "no UAT database: uat.branch is not declared, or database.neon.previews is not vercel (.icm/project.json) — nothing to reset"; echo "RESULT: SKIP"; exit 0; }
-  [ -n "$uat_id" ]   || { echo "UAT branch $uat_name does not exist yet — it arrives with the UAT git branch's first deployment"; echo "RESULT: SKIP"; exit 0; }
+  [ -n "$uat_name" ] || { echo "no UAT database: uat is not declared, or database.neon.uat_branch is empty (.icm/project.json) — nothing to reset"; echo "RESULT: SKIP"; exit 0; }
+  [ -n "$uat_id" ]   || { echo "UAT branch $uat_name does not exist yet — the operator creates it (db-env.sh init)"; echo "RESULT: SKIP"; exit 0; }
   [ "$uat_id" != "$prod_id" ] || die "the UAT branch and the production branch are the same branch — refusing"
   parent="$(printf '%s' "$bj" | jq -r --arg id "$uat_id" '[.[] | select(.id == $id)] | first | .parent_id // empty')"
   [ -n "$parent" ] || die "UAT branch $uat_name has no parent (a root branch cannot be reset)"
@@ -327,7 +346,7 @@ reset-uat)
     echo "RESULT: DRY-RUN"; exit 0
   fi
   neon_reset_branch "$uat_id" "$parent" "$uat_name"
-  echo "reset: $uat_name now carries production's latest state (the next push to the UAT git branch re-applies the branch's own migrations at build)"
+  echo "reset: $uat_name now carries production's latest state (the next UAT deployment of main re-applies main's unreleased migrations at build — redeploy the environment's latest to have them now)"
   echo "RESULT: RESET"; exit 0 ;;
 
 prune)

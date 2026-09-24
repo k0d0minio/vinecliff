@@ -88,9 +88,9 @@ Context budget: the Inputs table above is the budget (see `.icm/CONTEXT.md` → 
    announces — `report.sh announce`, called by the repo's release workflow where
    `reporting.announce_from` is `ci`, and by the operator by hand (or not at all) where it is
    `session` (`_shared/project-rules.md` → Reporting); a lane never calls it, never waits, and
-   never watches production. On a UAT repo the PR targets the UAT branch, the merge puts the
-   change on the client's UAT address, and the announcement waits for the batch's promotion
-   (`.icm/uat/CONTEXT.md`). The usage `end` line was written
+   never watches production. On a UAT repo the merge into `main` puts the change on the
+   client's UAT address, and the announcement waits for the batch's promotion
+   (`_shared/promotion.md`). The usage `end` line was written
    just before the close-out (above); nothing is written now. If you
    parked a finding in `.icm/intake/triage/` on the way and the folder now holds more than 60
    active stubs (`ls .icm/intake/triage/*.md | wc -l`; `intake/CONTEXT.md` → Triage → cap), say

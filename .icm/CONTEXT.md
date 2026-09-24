@@ -25,9 +25,9 @@ This folder also carries the pipeline — `project.json`, `stages/`, `lanes/`, `
 handoff, FAILURE — `scripts/run-pack.sh`), `_shared/`, `scripts/`, `skills/` (three-tier
 capability skills a stage loads on a trigger — `skills/README.md`), `raw/` + `processed/`
 for material a client sends, `output/` for the reports the scripts compile
-(`client-status.sh` → `client-status-latest.md`, the client's view), and `uat/` where
-`/setup` declared a persistent client UAT environment (the contract and the batch) — each
-seeded file documents itself, and
+(`client-status.sh` → `client-status-latest.md`, the client's view) — each seeded file
+documents itself (a client UAT environment, where `/setup` declares one, is
+`_shared/promotion.md`), and
 `.claude/skills/pipeline/SKILL.md` routes between them.
 
 ## The rules that travel with this folder

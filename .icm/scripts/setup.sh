@@ -21,11 +21,15 @@
 #    3. project.json  name, complexity, required_checks, personas, deploy, reporting, migrations
 #                  (stamp/tool/out_of_order), database (isolation, provider — a Neon project is
 #                  read once when its key is in the shell: production branch, preview branching,
-#                  the UAT branch; a MongoDB cluster's names and commands, and the cluster read
-#                  once when its URI is in the shell — D35), security, support, health_endpoint, uat — missing or still at
-#                  the stub's value is a line with the question; a declared UAT environment is
-#                  checked (url, batch.json, the branch on origin) and `--fix` seeds the empty
-#                  batch.json; undeclared is one info line, never a gap.
+#                  the UAT database; a MongoDB cluster's names and commands, and the cluster read
+#                  once when its URI is in the shell — D35), security, support, health_endpoint,
+#                  uat — missing or still at the stub's value is a line with the question. A
+#                  declared UAT environment (D39: `uat: {target, url}`, both or neither) is checked
+#                  — the UAT database named, and with a Vercel token the custom environment exists
+#                  on every product project and the team's `accountLimit.total` is at least 1
+#                  (else "UAT requires a Pro team"). The retired branch model FAILS: a `uat.branch`
+#                  key, or a `.icm/uat/batch.json` (removed by hand — never by a script).
+#                  Undeclared is one info line, never a gap.
 #    4. Environment   env-check.sh (route + binaries) and env.sh audit (names only).
 #    5. Tickets    validate-intake.sh over every live epic and triage/; triage-report.sh against
 #                  the cap; a loose TODO.md/BACKLOG.md at the root.
@@ -38,9 +42,9 @@
 #   10. Workflows  the reference release.yaml / labels.yaml present, or declared absent in
 #                  _shared/project-rules.md; neon-cleanup.yaml where a Neon project branches per
 #                  preview, mongodb-cleanup.yaml where a MongoDB repo has a database per preview
-#                  (`--fix` seeds either from --template); type:hotfix, type:handover and
-#                  type:tickets (the ticket PR's label, D38 — and type:promote on a UAT repo) in
-#                  .github/labels.yml.
+#                  (`--fix` seeds either from --template); type:hotfix and type:handover in
+#                  .github/labels.yml. On a UAT repo the release workflow is REQUIRED (it is the
+#                  promotion) and a db-migrate workflow must be callable from it (`workflow_call`).
 #   11. Support    tier none → nothing; micro → `micro: no support line`; basic|retainer → the
 #                  fail-safe page exists, the Sentry key is declared [production], alert maps to
 #                  a channel or project-rules.md records the red-job default.
@@ -233,7 +237,6 @@ if [ -f .icm/project.json ]; then
     if [ -z "$(neon_project_id)" ]; then fail "database.provider is neon but database.neon.project_id is empty — the Neon project id (Neon Console → Settings; a Vercel-managed database: Storage → Open in Neon)"
     else
       ok "neon: project $(neon_project_id) · key \$$(neon_api_key_env) · production branch $(neon_production_branch) · previews $(neon_previews)$( [ -n "$(neon_uat_branch)" ] && echo " · UAT branch $(neon_uat_branch)")"
-      [ "$(neon_previews)" = none ] && [ -n "$(project_field .uat.branch)" ] && warn "neon.previews is none while a UAT environment is declared — the UAT branch then deploys on the Preview environment's variables (production's database unless you scoped them); previews: vercel gives it, and every preview, a branch of its own"
       # shellcheck source=lib/neon.sh
       if source "$here/lib/neon.sh" 2>/dev/null && neon_ready; then
         nb="$(neon_branches 2>/dev/null)" || nb=""
@@ -249,7 +252,7 @@ if [ -f .icm/project.json ]; then
           fi
           if [ -n "$(neon_uat_branch)" ]; then
             if printf '%s' "$nb" | jq -e --arg n "$(neon_uat_branch)" '[.[] | select(.name == $n)] | length > 0' >/dev/null; then ok "neon: UAT branch $(neon_uat_branch) present"
-            else info "neon: UAT branch $(neon_uat_branch) not created yet — the integration creates it on the UAT git branch's first deployment"; fi
+            else warn "neon: UAT branch $(neon_uat_branch) not created yet — the operator creates it from $(neon_production_branch) and sets it on the '$(uat_target)' environment (db-env.sh init)"; fi
           fi
         fi
       else
@@ -275,19 +278,36 @@ if [ -f .icm/project.json ]; then
   fi
   [ -n "$(security_audit_command)" ] && ok "security.audit_command: $(security_audit_command)" || info "security.audit_command empty — security-check.sh audits npm/pnpm/yarn lockfiles it finds; set it for another ecosystem (pip-audit, cargo audit)"
   ok "support: tier $(support_tier)$( [ -n "$(support_failsafe)" ] && echo " · fail-safe $(support_failsafe)") · sentry via \$$(support_sentry_env)"
-  if uat_declared; then
-    ub="$(uat_branch)"; uu="$(uat_url)"
-    if [ -n "$uu" ]; then ok "uat: branch $ub → $uu (every run merges into $ub; production by promotion — .icm/uat/CONTEXT.md)"
-    else fail "uat.branch is '$ub' but uat.url is empty — the one fixed address the client opens (a domain assigned to the branch in Vercel, or the branch alias)"; fi
-    if [ -f .icm/uat/batch.json ]; then
-      jq -e . .icm/uat/batch.json >/dev/null 2>&1 && ok ".icm/uat/batch.json present ($(jq -r '(.stubs // []) | length' .icm/uat/batch.json) stub(s) in the batch on this checkout)" || fail ".icm/uat/batch.json is not valid JSON — fix it by hand"
-    elif [ "$FIX" -eq 1 ]; then
-      mkdir -p .icm/uat; jq -n '{stubs: [], client_approved: false, approved_by: "", approved_on: "", approved_head: "", approved_note: "", promotions: []}' > .icm/uat/batch.json; fixed "created .icm/uat/batch.json (empty batch)"
-    else fail ".icm/uat/batch.json missing — .icm/scripts/promote-uat.sh init writes it (or --fix)"; fi
-    if git ls-remote --exit-code --heads origin "$ub" >/dev/null 2>&1; then ok "branch $ub exists on origin"
-    else warn "branch $ub not found on origin (or origin unreachable) — create it once from main: git push origin main:$ub; then protect it like main and assign the domain to it in Vercel (promote-uat.sh init lists the steps)"; fi
+  # The retired branch model (D31, retired by D39) is a failure, never a fallback.
+  project_has '.uat.branch' && fail "uat.branch is set — the branch model is retired (D39): main is the only long-lived branch; UAT is a Vercel custom environment declared as uat: {target, url} (/setup). Merge the UAT branch into main per the cutover checklist, then replace the key"
+  [ -e .icm/uat/batch.json ] && fail ".icm/uat/batch.json exists — the batch file is retired (D39): the batch is git log <last published release>..origin/main. Remove it by hand (git rm -r .icm/uat)"
+  if project_has '.uat.target' && ! project_has '.uat.url'; then fail "uat.target is '$(project_field .uat.target)' but uat.url is empty — both, or neither: the url is the domain attached to the custom environment"
+  elif project_has '.uat.url' && ! project_has '.uat.target'; then fail "uat.url is '$(project_field .uat.url)' but uat.target is empty — both, or neither: the target is the Vercel custom environment's slug"
+  elif uat_declared; then
+    ok "uat: target $(uat_target) → $(uat_url) (every merge deploys there; production is promoted when the operator publishes the Release promote.sh approve drafts — _shared/promotion.md)"
+    case "$(database_provider)" in
+      neon)    [ -n "$(neon_uat_branch)" ] && ok "uat database: Neon branch $(neon_uat_branch)" || fail "uat is declared but database.neon.uat_branch is empty — the named Neon branch behind the UAT environment (D39 (3); 'uat' by convention)" ;;
+      mongodb) [ -n "$(mongo_uat_database)" ] && ok "uat database: $(mongo_uat_database)" || fail "uat is declared but database.mongodb.uat_name is empty — the database behind the UAT environment (D39 (3); 'uat' by convention)" ;;
+    esac
+    # The environment and the plan, read once where a Vercel token is in reach — names only.
+    if project_has '.deploy.projects' && command -v curl >/dev/null 2>&1; then
+      # shellcheck source=lib/vercel.sh
+      if source "$here/lib/vercel.sh" 2>/dev/null && [ -n "$vercel_token" ]; then
+        while IFS= read -r pn; do
+          [ -n "$pn" ] || continue
+          ce="$(vercel_get "/v9/projects/$pn/custom-environments" 2>/dev/null)" || ce=""
+          if [ "$(printf '%s' "$ce" | tail -n1)" != "200" ]; then warn "vercel: custom environments of $pn could not be read (HTTP $(printf '%s' "$ce" | tail -n1)) — lib/vercel.sh --check says why"; continue; fi
+          ce="$(printf '%s' "$ce" | sed '$d')"
+          lim="$(printf '%s' "$ce" | jq -r '(.accountLimit.total // 0) | tonumber? // 0')"
+          if [ "$lim" -lt 1 ]; then fail "vercel: $pn allows $lim custom environment(s) — UAT requires a Pro team (D39 (2)); undeclare uat, or move the project"
+          elif printf '%s' "$ce" | jq -e --arg t "$(uat_target)" 'any((.environments // [])[]; .slug == $t)' >/dev/null; then
+            ok "vercel: $pn has the custom environment $(uat_target)$(printf '%s' "$ce" | jq -r --arg t "$(uat_target)" '[(.environments // [])[] | select(.slug == $t)] | first | ((.domains // []) | map(.name) | if length > 0 then " · domains " + join(", ") else " · no domain attached yet (promote.sh init)" end)')"
+          else fail "vercel: $pn has no custom environment '$(uat_target)' ($lim allowed) — the operator creates it (promote.sh init lists the acts)"; fi
+        done < <(deploy_projects | jq -r 'select((.class // "product") == "product") | .name')
+      else info "vercel: no token in this shell — the custom environment and the Pro plan are not checked; export \$$(deploy_token_env) and re-run"; fi
+    fi
   else
-    info "uat: not declared — every run merges into main and ships on the merge; declare uat.branch + uat.url (/setup asks) for a persistent client UAT environment (.icm/uat/CONTEXT.md)"
+    info "uat: not declared — every merge to main is the production release; /setup declares uat: {target, url} for a client UAT environment on a Pro team (_shared/promotion.md)"
   fi
   if [ -n "$(health_endpoints | head -n1)" ]; then ok "health_endpoint: $(health_endpoints | paste -sd', ' -) — health-check.sh reads it once after the merge"
   elif project_has '.deploy.projects'; then warn "health_endpoint empty while deploy is declared — which URL on each production project answers 200 when it is up (e.g. https://<production_url>/api/health)? Until it is set, health-check.sh reports SKIP after every merge and nobody is told production is down"
@@ -371,8 +391,12 @@ for kind in announce alert economics; do
     done ;; esac; done
 done
 af="$(project_field .reporting.announce_from session)"
-if [ "$af" = "ci" ]; then [ -f .github/workflows/release.yaml ] || [ -f .github/workflows/release.yml ] && ok "announce_from: ci and a release workflow exists" || fail "announce_from: ci but no .github/workflows/release.yaml — nothing announces (seed the reference workflow, or set session)"
-else [ -f .github/workflows/release.yaml ] && warn "announce_from: session but .github/workflows/release.yaml exists — two callers would announce twice; set announce_from: ci or remove the workflow" || ok "announce_from: session (Release step 9 calls report.sh)"; fi
+has_release=0; { [ -f .github/workflows/release.yaml ] || [ -f .github/workflows/release.yml ]; } && has_release=1
+if uat_declared; then
+  # On a UAT repo the merge announces nothing and the release workflow IS the promotion (D39 (5)).
+  [ "$has_release" -eq 1 ] && ok "uat: the release workflow exists — it promotes and announces when the operator publishes a Release (announce_from applies to no-UAT repos only)" || fail "uat is declared but no .github/workflows/release.yaml — nothing promotes a published Release (/setup seeds the reference github-pipeline/workflows/release.yaml)"
+elif [ "$af" = "ci" ]; then [ "$has_release" -eq 1 ] && ok "announce_from: ci and a release workflow exists" || fail "announce_from: ci but no .github/workflows/release.yaml — nothing announces (seed the reference workflow, or set session)"
+else [ "$has_release" -eq 1 ] && warn "announce_from: session but .github/workflows/release.yaml exists — its merge job announces only with announce_from: ci, so it is idle here; set announce_from: ci or remove the workflow" || ok "announce_from: session (Release step 9 calls report.sh)"; fi
 
 # --- 10. workflows -----------------------------------------------------------------------------------------------------
 echo "[10/11] Workflows — the reference workflows, present or declared absent"
@@ -394,13 +418,19 @@ if [ "$(database_provider)" = mongodb ] && [ "$(mongo_previews)" = branch ]; the
   else warn "mongodb-cleanup workflow absent — nothing drops a closed PR's preview_<branch> database; setup.sh --fix --template <path> seeds the reference one, or record the absence in project-rules.md → Reporting → Workflows"; fi
 fi
 if [ -f .github/labels.yml ]; then
-  lane_labels="type:hotfix type:handover type:tickets"; uat_declared && lane_labels="$lane_labels type:promote"
-  for l in $lane_labels; do
+  for l in type:hotfix type:handover; do
     if grep -q "$l" .github/labels.yml; then ok "$l in .github/labels.yml"
-    elif [ "$l" = "type:tickets" ]; then warn "type:tickets missing from .github/labels.yml — the ticket PR's label (D38; the pr-conventions skill → The ticket PR): add it, and create it once in GitHub (the operator's act), before the first ticket PR"
     else warn "$l missing from .github/labels.yml — add it (and create the label once in GitHub) before the lane's first PR"; fi
   done
-else info "no .github/labels.yml — the label vocabulary is not documented here (new-run.sh dies if a type:<lane> label does not exist in GitHub; a ticket PR needs type:tickets created once in GitHub — D38)"; fi
+  grep -q 'type:promote' .github/labels.yml && info "type:promote in .github/labels.yml — retired with the promotion PR (D39); remove it when convenient"
+else info "no .github/labels.yml — the label vocabulary is not documented here (new-run.sh dies if a type:<lane> label does not exist in GitHub)"; fi
+# D39 (5): on a UAT repo production migrates at the promotion, never on the push to main.
+if uat_declared; then
+  mig=""; for f in .github/workflows/db-migrate.yml .github/workflows/db-migrate.yaml; do [ -f "$f" ] && mig="$f"; done
+  if [ -z "$mig" ]; then info "no .github/workflows/db-migrate.yml — the release workflow's migrate job must be removed if production has no migrator (the reference release.yaml calls it)"
+  elif grep -q 'workflow_call' "$mig"; then ok "$mig is callable (workflow_call) — the release workflow migrates production before it promotes"
+  else fail "$mig has no workflow_call trigger — on a UAT repo production migrates at the promotion, not on push to main (D39 (5)); take the reference github-pipeline/workflows/db-migrate.yml shape"; fi
+fi
 
 # --- 11. support -------------------------------------------------------------------------------------------------------
 echo "[11/11] Support — what the deal promised after handover"
