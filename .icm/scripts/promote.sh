@@ -174,7 +174,7 @@ init)
       fi
     fi
     [ "$done_env" -eq 1 ] && echo "  [OK]   $pn: custom environment '$ut' exists" \
-      || echo "  [TODO] $pn: Vercel → Settings → Environments → Create Environment '$ut' (Pro; one per project) — never the Neon integration on it"
+      || echo "  [TODO] $pn: Vercel → Settings → Environments → Create Environment '$ut' (Pro; one per project) — production's database is never connected to it (D41)"
     [ "$done_dom" -eq 1 ] && echo "  [OK]   $pn: $uu is attached to '$ut'" \
       || echo "  [TODO] $pn: attach the host of $uu to the environment '$ut' (Settings → Domains → the domain → Environment '$ut'), moving it off any git branch it was bound to"
     if [ "$done_track" -eq 1 ]; then echo "  [OK]   $pn: '$ut' tracks the branch main"
@@ -183,7 +183,7 @@ init)
     echo "  [TODO] $pn: Settings → Environments → Production → Branch Tracking → turn OFF 'Auto-assign Custom Production Domains' — every merge then builds a STAGED production deployment; do this BEFORE any unsigned change merges, or it ships"
   done <<<"$pp"
   case "$(database_provider)" in
-    neon)    echo "  [INFO] the UAT database: .icm/scripts/db-env.sh init lists the Neon branch '$(neon_uat_branch)' and its variables on '$ut'" ;;
+    neon)    echo "  [INFO] the UAT database: a second Marketplace database connected to '$ut' + Preview, production's to Production only (D41) — .icm/scripts/db-env.sh init lists the acts" ;;
     mongodb) echo "  [INFO] the UAT database: .icm/scripts/db-env.sh init lists '$(mongo_uat_database)' and its variables on '$ut'" ;;
     *)       echo "  [TODO] decide which data the client tests against and set it on '$ut''s own variables (vercel env add <NAME> $ut) — never production's credentials" ;;
   esac

@@ -19,7 +19,8 @@ gives the run a database of its own. Both headers are the specification.
 1. **Bind the run's database** — `db-branch.sh <slug> up` → `BOUND`, then
    `eval "$(.icm/scripts/db-branch.sh <slug> env)"` in the shell that will run the repo's
    migration tool. On a Neon repo (`database.isolation: neon`) that is a branch of its own,
-   `run/<slug>`, a copy of production made now with a 7-day expiry — needs the key
+   `run/<slug>`, a copy of production made now with a 7-day expiry — on a UAT repo a copy of the
+   UAT database, in the non-production project (D41), never production — needs the key
    `database.neon.api_key_env` names in the shell, nothing else. `SKIP` means this repo declares
    no isolation (`.icm/project.json` → `database.isolation`), or the engine it names is out of
    reach: then **run no migration locally** — the preview database and CI apply it, and the
@@ -47,6 +48,14 @@ gives the run a database of its own. Both headers are the specification.
   no `down` script is expected, so a code revert must tolerate the newer schema — additive
   columns with defaults, no drops in the same release as the code that stops using them. Where
   `reversible` is `true`, write the `down` and test it against the run's own database.
+- **A single migration may be irreversible on a reversible repo** (D42) — a manual backfill, a
+  destructive rename, anything with no honest `down`: declare it with `irreversible = true` in
+  the migration file itself (an exported const, or the CommonJS `exports.irreversible = true`),
+  and skip writing a `down` for it. `prove` reads the marker without running anything, proves
+  that migration's `up` and its idempotency only, and names it in the output. Nothing at or
+  before it in this branch's own migrations is down-tested either — a down assumes an unbroken
+  chain back from the current state, and skipping one mid-chain breaks that for every down
+  beneath it.
 - One migration per concern; the spec's `touches:` names the data model, so a migration the
   spec does not imply is a spec gap → `revise`.
 - Never edit a migration `main` already has. A fix is a new migration.
@@ -69,8 +78,9 @@ gives the run a database of its own. Both headers are the specification.
    stamped before some of `main`'s, those go up — and this branch's come down — one at a time,
    `--single`) it runs this branch's own migrations up → down → up and compares the collection list and every
    index spec: `down` must restore them where `migrations.reversible` is true (and every file
-   must export a `down`); the second `up` must reproduce the first; and, the runner's records of
-   them forgotten the way a re-stamp forgets them, one more `up` must change nothing.
+   must export a `down`, unless it declares itself irreversible); the second `up` must reproduce
+   the first; and, the runner's records of them forgotten the way a re-stamp forgets them, one
+   more `up` must change nothing.
    `UNPROVEN n` names what failed — fix it on this branch. The seed runs only after `PROVEN`.
 6. Release stop class 3 asks `env.sh audit --changed` and reads `migrations.reversible`: a
    forward-only migration in a merge with no rollback path is recorded in the `## Release`
@@ -79,15 +89,16 @@ gives the run a database of its own. Both headers are the specification.
 ## Where a preview or UAT applies the migration
 
 On a Neon repo with `database.neon.previews: vercel`, every preview deployment has a database of
-its own (`preview/<git-branch>`, a child of production) and applies the branch's migrations **at
+its own (`preview/<git-branch>`, a child of production — on a UAT repo, of the UAT database in
+the second Marketplace database, D41) and applies the branch's migrations **at
 build**, because the repo's build command runs the migrate step (`_shared/project-rules.md` → The
 factory → The environments' databases says so, or says it does not). A preview whose build does
 not migrate shows production's shape without this run's change; say so in the stop message rather
 than assuming the preview proved the migration.
 
 On a UAT repo (`_shared/promotion.md`) the merge into `main` deploys the UAT environment, whose
-build migrates the **named** UAT database (`database.neon.uat_branch` / `database.mongodb.uat_name`)
-the same way — inside a custom environment `VERCEL_ENV` is `preview`. **Production is migrated at
+build migrates the UAT database (on Neon the second Marketplace database's default branch, D41;
+on MongoDB `database.mongodb.uat_name`) the same way — inside a custom environment `VERCEL_ENV` is `preview`. **Production is migrated at
 the promotion, not on the merge:** the release workflow calls the repo's `db-migrate.yml` when the
 operator publishes the Release, before it promotes. So a migration merged today is live on UAT
 today and reaches production only with its batch — schema and code move at the same promotion,

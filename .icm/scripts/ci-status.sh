@@ -119,7 +119,11 @@ api() { # api <path> <what> -> body on stdout, dies on non-200
 
 # --- resolve the PR ---------------------------------------------------------------------------------
 
-if [ -z "$pr_number" ]; then
+# Located whenever a slug is given, independently of whether pr_number still needs resolving from
+# it: run.md's own branch line is what the expected-head check below needs to tell whether this
+# checkout IS the run's branch.
+run_md=""
+if [ -n "$slug" ]; then
   run_md="$repo_root/.icm/runs/$slug/run.md"
   if [ ! -f "$run_md" ]; then
     # After close-out, the run folder lives in the archive — check there so the
@@ -127,19 +131,63 @@ if [ -z "$pr_number" ]; then
     archived="$repo_root/$runs_archive_rel/$slug/run.md"
     [ -f "$archived" ] && run_md="$archived"
   fi
-  [ -f "$run_md" ] || die "no .icm/runs/$slug/run.md in the working tree — run the stage preamble (resolve-run.sh $slug) first, or pass --pr <number>"
+  [ -f "$run_md" ] || run_md=""
+fi
+
+if [ -z "$pr_number" ]; then
+  [ -n "$run_md" ] || die "no .icm/runs/$slug/run.md in the working tree — run the stage preamble (resolve-run.sh $slug) first, or pass --pr <number>"
   pr_number="$(grep -m1 '^- pr:' "$run_md" \
     | sed -E 's/^- pr:[[:space:]]*//; s/[[:space:]]+#.*$//; s#^.*/pull/##; s/^#//; s/[^0-9].*$//' || true)"
   [ -n "$pr_number" ] || die "run.md for '$slug' has no usable '- pr:' line — Define has not opened the PR (or pass --pr <number>)"
 fi
 case "$pr_number" in ''|*[!0-9]*) die "PR number must be numeric, got: $pr_number" ;; esac
 
+# Expected head: this checkout is the run's own branch (run.md → '- branch:') and that branch is
+# already pushed — the pushed SHA is what the caller means by "the run's CI". Outside a matching,
+# pushed checkout (no run.md, a different branch, an unpushed head, no git) this stays empty and
+# nothing below changes.
+expected_sha=""
+if [ -n "$run_md" ] && command -v git >/dev/null 2>&1; then
+  run_branch="$(grep -m1 '^- branch:' "$run_md" 2>/dev/null \
+    | sed -E 's/^- branch:[[:space:]]*//; s/[[:space:]]+#.*$//; s/[[:space:]]*$//')"
+  current_branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [ -n "$run_branch" ] && [ "$run_branch" = "$current_branch" ]; then
+    local_head="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || true)"
+    upstream_head="$(git -C "$repo_root" rev-parse '@{upstream}' 2>/dev/null || true)"
+    [ -n "$local_head" ] && [ "$local_head" = "$upstream_head" ] && expected_sha="$local_head"
+  fi
+fi
+
 pr_json="$(api "/repos/${repo}/pulls/${pr_number}" "PR #$pr_number")"
 head_sha="$(printf '%s' "$pr_json" | jq -r '.head.sha // empty')"
+[ -n "$head_sha" ] || die "PR #$pr_number has no head SHA"
+
+deadline=$(( SECONDS + timeout ))
+
+# Never verdict on a head that predates a push the caller just made. The settle loop below re-reads
+# the PR each pass, but that only catches a push landing MID-wait — nothing, until now, compared
+# the PR against a push already made before this script's FIRST read, so a read landing in the
+# window before GitHub moves the PR (10–30s is routine) would settle a verdict about the old head
+# (.icm/_shared/ci.md — "a stage never … declares done on a verdict it did not actually
+# establish"). Poll — within the one timeout the whole call gets — until the PR catches up.
+if [ -n "$expected_sha" ] && [ "$head_sha" != "$expected_sha" ]; then
+  echo "waiting for GitHub to register ${expected_sha:0:7} on PR #$pr_number (currently ${head_sha:0:7})" >&2
+  while [ "$head_sha" != "$expected_sha" ]; do
+    if [ "$wait" -eq 0 ] || [ "$SECONDS" -ge "$deadline" ]; then
+      echo "PR #$pr_number never registered ${expected_sha:0:7} within ${timeout}s (still at ${head_sha:0:7}) — this is NOT a pass" >&2
+      echo "RESULT: PENDING"; exit 4
+    fi
+    sleep "$interval"
+    pr_json="$(api "/repos/${repo}/pulls/${pr_number}" "PR #$pr_number")"
+    head_sha="$(printf '%s' "$pr_json" | jq -r '.head.sha // empty')"
+    [ -n "$head_sha" ] || die "PR #$pr_number has no head SHA"
+  done
+  echo "PR #$pr_number now at ${head_sha:0:7} — matches the pushed head" >&2
+fi
+
 pr_state="$(printf '%s' "$pr_json" | jq -r '.state // empty')"
 pr_merged="$(printf '%s' "$pr_json" | jq -r '.merged // false')"
 pr_draft="$(printf '%s' "$pr_json" | jq -r '.draft // false')"
-[ -n "$head_sha" ] || die "PR #$pr_number has no head SHA"
 
 # Which tier this verdict settles (blind-until-ready — _shared/ci.md). A DRAFT head runs the
 # cheap tier and produces NO product-app previews at all: zero
@@ -233,8 +281,8 @@ read_signals() {
 }
 
 # --- wait for the run to settle ----------------------------------------------------------------------
+# deadline was set above, before the expected-head wait — the two share one timeout budget.
 
-deadline=$(( SECONDS + timeout ))
 verdict=""
 signals=""
 

@@ -21,14 +21,18 @@
 #    3. project.json  name, complexity, required_checks, personas, deploy, reporting, migrations
 #                  (stamp/tool/out_of_order), database (isolation, provider — a Neon project is
 #                  read once when its key is in the shell: production branch, preview branching,
-#                  the UAT database; a MongoDB cluster's names and commands, and the cluster read
-#                  once when its URI is in the shell — D35), security, support, health_endpoint,
-#                  uat — missing or still at the stub's value is a line with the question. A
-#                  declared UAT environment (D39: `uat: {target, url}`, both or neither) is checked
-#                  — the UAT database named, and with a Vercel token the custom environment exists
-#                  on every product project and the team's `accountLimit.total` is at least 1
-#                  (else "UAT requires a Pro team"). The retired branch model FAILS: a `uat.branch`
-#                  key, or a `.icm/uat/batch.json` (removed by hand — never by a script).
+#                  and with UAT the non-production project too; a MongoDB cluster's names and
+#                  commands, and the cluster read once when its URI is in the shell — D35),
+#                  security, support, health_endpoint, uat — missing or still at the stub's value
+#                  is a line with the question. A declared UAT environment (D39: `uat: {target,
+#                  url}`, both or neither) is checked — the UAT database declared (Neon, D41: a
+#                  `nonprod_project_id` that is not production's), and with a Vercel token the
+#                  custom environment exists on every product project, the team's
+#                  `accountLimit.total` is at least 1 (else "UAT requires a Pro team") and, on a
+#                  Neon repo, production's database variable is scoped to Production only (no
+#                  Preview, no custom environment — D41; a [TODO] when the API does not show it).
+#                  The retired shapes FAIL: a `uat.branch` key, a `.icm/uat/batch.json` (removed
+#                  by hand — never by a script), a `database.neon.uat_branch`.
 #                  Undeclared is one info line, never a gap.
 #    4. Environment   env-check.sh (route + binaries) and env.sh audit (names only).
 #    5. Tickets    validate-intake.sh over every live epic and triage/; triage-report.sh against
@@ -98,6 +102,7 @@ project_json="$repo_root/.icm/project.json"
 gaps=0; warns=0
 ok()   { echo "  [OK]   $*"; }
 info() { echo "  [INFO] $*"; }
+todo() { echo "  [TODO] $*"; }   # an operator's check no API here can answer — never a gap
 warn() { echo "  [WARN] $*"; warns=$((warns+1)); }
 fail() { echo "  [FAIL] $*"; gaps=$((gaps+1)); }
 fixed(){ echo "  [+]    $*"; }
@@ -230,31 +235,39 @@ if [ -f .icm/project.json ]; then
   case "$(database_isolation)" in
     none) warn "database.isolation: none — does this repo have a database? neon (one Neon branch per run — curl and the key named by database.neon.api_key_env, no psql), database (one MongoDB database per run on the repo's cluster — node and its driver), schema (one Postgres schema per run on \$$(database_url_env)) or container (one local Postgres per run) gives each run its own; none is right for a repo without one" ;;
     database) if [ "$(database_provider)" = mongodb ]; then ok "database: database isolation — run_<slug> on the cluster \$$(database_url_env) names, migrated and seeded by the repo's own commands"; else fail "database.isolation is database but database.provider is not mongodb — set provider: mongodb and the database.mongodb block"; fi ;;
-    neon) if [ "$(database_provider)" = neon ]; then ok "database: neon isolation — run/<slug> branches of $(neon_production_branch), via \$$(database_url_env)"; else fail "database.isolation is neon but database.provider is not — set provider: neon and database.neon.project_id"; fi ;;
+    neon) if [ "$(database_provider)" = neon ]; then ok "database: neon isolation — run/<slug> branches of $(neon_split && echo "the UAT database, in the non-production project" || neon_production_branch), via \$$(database_url_env)"; else fail "database.isolation is neon but database.provider is not — set provider: neon and database.neon.project_id"; fi ;;
     *)    ok "database: $(database_isolation) isolation via \$$(database_url_env)$( [ "$(database_isolation)" = container ] && echo " · $(database_image), db $(database_name)")" ;;
   esac
   if [ "$(database_provider)" = neon ]; then
     if [ -z "$(neon_project_id)" ]; then fail "database.provider is neon but database.neon.project_id is empty — the Neon project id (Neon Console → Settings; a Vercel-managed database: Storage → Open in Neon)"
     else
-      ok "neon: project $(neon_project_id) · key \$$(neon_api_key_env) · production branch $(neon_production_branch) · previews $(neon_previews)$( [ -n "$(neon_uat_branch)" ] && echo " · UAT branch $(neon_uat_branch)")"
+      ok "neon: project $(neon_project_id) · key \$$(neon_api_key_env) · production branch $(neon_production_branch) · previews $(neon_previews)$( [ -n "$(neon_split && neon_nonprod_project_id)" ] && echo " · non-production project $(neon_nonprod_project_id) (UAT, previews, runs)")"
       # shellcheck source=lib/neon.sh
       if source "$here/lib/neon.sh" 2>/dev/null && neon_ready; then
+        # Production's project first (read only); with UAT the previews live in the other one (D41).
+        np_project="$neon_project"; neon_use_project "$neon_prod_project"
         nb="$(neon_branches 2>/dev/null)" || nb=""
+        neon_use_project "$np_project"
+        nnb="$nb"; neon_split && { nnb="$(neon_branches 2>/dev/null)" || nnb=""; }
         if [ -z "$nb" ]; then warn "neon: project $(neon_project_id) could not be read via \$$(neon_api_key_env) — .icm/scripts/lib/neon.sh --check says why"
+        elif [ -z "$nnb" ]; then warn "neon: the non-production project $np_project could not be read via \$$(neon_api_key_env) — the key must reach both projects (.icm/scripts/lib/neon.sh --check)"
         else
           if printf '%s' "$nb" | jq -e --arg n "$(neon_production_branch)" '[.[] | select(.name == $n)] | length > 0' >/dev/null; then
             ok "neon: production branch $(neon_production_branch) present, $(printf '%s' "$nb" | jq -r --arg n "$(neon_production_branch)" '[.[] | select(.name == $n)] | first | if .protected then "protected" else "not protected (db-env.sh init)" end')"
           else fail "neon: no branch named $(neon_production_branch) in project $(neon_project_id) — database.neon.production_branch names it"; fi
+          if neon_split && [ "$np_project" != "$neon_prod_project" ]; then
+            ns="$(printf '%s' "$nb" | jq '[.[] | select(.name | test("^(preview|run)/"))] | length')"
+            [ "$ns" -eq 0 ] || warn "neon: production's project carries $ns preview/* or run/* branch(es) — its database still branches previews, or they predate D41 (db-env.sh status lists them; the pipeline never deletes there)"
+            ok "neon: UAT database $(printf '%s' "$nnb" | jq -r '[.[] | select(.default == true)] | first | "\(.name) (\(.id))"') — the default branch of $np_project"
+          fi
           if [ "$(neon_previews)" = vercel ]; then
-            np="$(printf '%s' "$nb" | jq '[.[] | select(.name | startswith("preview/"))] | length')"
+            np="$(printf '%s' "$nnb" | jq '[.[] | select(.name | startswith("preview/"))] | length')"
             if [ "$np" -gt 0 ]; then ok "neon: preview branching is live — $np preview/* branch(es)"
             else warn "neon: no preview/* branch yet — is the Vercel integration's Preview branching enabled? (db-env.sh init lists the toggle); until it is, previews share the Preview environment's database"; fi
           fi
-          if [ -n "$(neon_uat_branch)" ]; then
-            if printf '%s' "$nb" | jq -e --arg n "$(neon_uat_branch)" '[.[] | select(.name == $n)] | length > 0' >/dev/null; then ok "neon: UAT branch $(neon_uat_branch) present"
-            else warn "neon: UAT branch $(neon_uat_branch) not created yet — the operator creates it from $(neon_production_branch) and sets it on the '$(uat_target)' environment (db-env.sh init)"; fi
-          fi
         fi
+      elif neon_split && [ -z "$(neon_nonprod_project_id)" ]; then
+        info "neon: branches not read — the non-production project is not declared (uat, below)"
       else
         info "neon: \$$(neon_api_key_env) unset in this shell (or curl missing) — names checked, branches not read; export it and re-run, or db-env.sh status"
       fi
@@ -280,13 +293,18 @@ if [ -f .icm/project.json ]; then
   ok "support: tier $(support_tier)$( [ -n "$(support_failsafe)" ] && echo " · fail-safe $(support_failsafe)") · sentry via \$$(support_sentry_env)"
   # The retired branch model (D31, retired by D39) is a failure, never a fallback.
   project_has '.uat.branch' && fail "uat.branch is set — the branch model is retired (D39): main is the only long-lived branch; UAT is a Vercel custom environment declared as uat: {target, url} (/setup). Merge the UAT branch into main per the cutover checklist, then replace the key"
+  project_has '.database.neon.uat_branch' && fail "database.neon.uat_branch is set — the named-branch UAT database is retired (D41): a branch of production's project sent every UAT build to production. The UAT database is a second Marketplace database: declare its Neon project as database.neon.nonprod_project_id and remove the key (db-env.sh init lists the acts)"
   [ -e .icm/uat/batch.json ] && fail ".icm/uat/batch.json exists — the batch file is retired (D39): the batch is git log <last published release>..origin/main. Remove it by hand (git rm -r .icm/uat)"
   if project_has '.uat.target' && ! project_has '.uat.url'; then fail "uat.target is '$(project_field .uat.target)' but uat.url is empty — both, or neither: the url is the domain attached to the custom environment"
   elif project_has '.uat.url' && ! project_has '.uat.target'; then fail "uat.url is '$(project_field .uat.url)' but uat.target is empty — both, or neither: the target is the Vercel custom environment's slug"
   elif uat_declared; then
     ok "uat: target $(uat_target) → $(uat_url) (every merge deploys there; production is promoted when the operator publishes the Release promote.sh approve drafts — _shared/promotion.md)"
     case "$(database_provider)" in
-      neon)    [ -n "$(neon_uat_branch)" ] && ok "uat database: Neon branch $(neon_uat_branch)" || fail "uat is declared but database.neon.uat_branch is empty — the named Neon branch behind the UAT environment (D39 (3); 'uat' by convention)" ;;
+      neon)    if [ -z "$(neon_nonprod_project_id)" ]; then fail "uat is declared but database.neon.nonprod_project_id is empty — the Neon project of the second Marketplace database ('uat-$(project_field .name)', connected to '$(uat_target)' + Preview): UAT is its default branch, previews and runs live in it (D41; db-env.sh init lists the acts)"
+               elif [ "$(neon_nonprod_project_id)" = "$(neon_project_id)" ]; then fail "database.neon.nonprod_project_id is production's project ($(neon_project_id)) — UAT, previews and runs must live in a second Marketplace database, never production's (D41)"
+               else ok "uat database: the default branch of Neon project $(neon_nonprod_project_id) — a second Marketplace database; production's $(neon_project_id) is read, never written (D41)"; fi
+               [ -n "$(neon_reset_command)" ] && ok "neon: reset_command \`$(neon_reset_command)\` — db-env.sh reset-uat --apply re-makes the UAT database with it" \
+                 || info "neon: reset_command empty — db-env.sh reset-uat says SKIP; which command empties the UAT database and re-migrates and re-seeds it (prisma: npx prisma migrate reset --force)?" ;;
       mongodb) [ -n "$(mongo_uat_database)" ] && ok "uat database: $(mongo_uat_database)" || fail "uat is declared but database.mongodb.uat_name is empty — the database behind the UAT environment (D39 (3); 'uat' by convention)" ;;
     esac
     # The environment and the plan, read once where a Vercel token is in reach — names only.
@@ -303,6 +321,18 @@ if [ -f .icm/project.json ]; then
           elif printf '%s' "$ce" | jq -e --arg t "$(uat_target)" 'any((.environments // [])[]; .slug == $t)' >/dev/null; then
             ok "vercel: $pn has the custom environment $(uat_target)$(printf '%s' "$ce" | jq -r --arg t "$(uat_target)" '[(.environments // [])[] | select(.slug == $t)] | first | ((.domains // []) | map(.name) | if length > 0 then " · domains " + join(", ") else " · no domain attached yet (promote.sh init)" end)')"
           else fail "vercel: $pn has no custom environment '$(uat_target)' ($lim allowed) — the operator creates it (promote.sh init lists the acts)"; fi
+          # D41: production's database is connected to Production only. Its variable (url_env) must
+          # target production alone — a Preview or custom-environment scope on the same entry means
+          # production's database reaches UAT. Names and targets only; values are never read.
+          if [ "$(database_provider)" = neon ]; then
+            ue="$(database_url_env)"
+            if envs="$(vercel_get_all "/v9/projects/$pn/env" envs "" '{key, target: (.target // []), ce: (.customEnvironmentIds // [])}' 2>/dev/null)"; then
+              pe="$(printf '%s' "$envs" | jq -c --arg k "$ue" '[.[] | select(.key == $k and (.target | index("production")))]')"
+              if [ "$(printf '%s' "$pe" | jq 'length')" -eq 0 ]; then todo "vercel: $pn shows no \$$ue on Production — the API cannot say how production's database is connected; check it by hand: Storage → production's database → Production only, preview branching off (D41)"
+              elif printf '%s' "$pe" | jq -e 'any(.[]; (.target | length) > 1 or (.ce | length) > 0)' >/dev/null; then fail "vercel: $pn's production \$$ue also targets $(printf '%s' "$pe" | jq -r '[.[] | (.target - ["production"])[], (if (.ce | length) > 0 then "a custom environment" else empty end)] | unique | join(", ")') — production's database is connected beyond Production and reaches UAT (D41): Storage → production's database → its connection → Production only"
+              else ok "vercel: $pn's production \$$ue targets Production only (D41)"; fi
+            else todo "vercel: the variables of $pn could not be read — the API cannot say how production's database is connected; check it by hand (D41)"; fi
+          fi
         done < <(deploy_projects | jq -r 'select((.class // "product") == "product") | .name')
       else info "vercel: no token in this shell — the custom environment and the Pro plan are not checked; export \$$(deploy_token_env) and re-run"; fi
     fi

@@ -39,7 +39,7 @@ writes **one stub per merge SHA** — `triage/health-check-<date>-<short-sha>.md
 below, `lane: bug`, `found-by: health-check · <date>`, `complexity: high` — carrying the endpoint,
 the code each attempt saw, the merge SHA and the recoveries `rollback.sh` prepares. It writes
 the file and commits nothing: the stage names it in its stop message and the operator decides —
-land it for the bug lane (a ticket PR), or open `/pipeline hotfix` by hand. Nothing parks a stub for the
+land it for the bug lane (a direct ticket commit to `main`), or open `/pipeline hotfix` by hand. Nothing parks a stub for the
 hotfix lane.
 
 A **template change request** is parked here too (`_shared/template-change.md`): when a request
@@ -236,7 +236,7 @@ PR; `batch` writes an intake epic, the others only read.
   stub, the same `file:line` cited elsewhere, or a body naming a run or PR that has since
   merged. One line per candidate — name, age, the reason — and the exact `git rm` for each.
   **It never deletes.** The human confirms name by name; the agent then runs only the deletions
-  confirmed, in one commit on one ticket PR, and nothing else. A candidate that is a duplicate rather than dead
+  confirmed, in one direct ticket commit to `main`, and nothing else. A candidate that is a duplicate rather than dead
   is better retired with a `superseded-by:` line into `_done/` (as `batch` does) than removed.
 
 ## After the batch
