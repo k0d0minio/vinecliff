@@ -101,25 +101,21 @@ default, and never something a session opts into on its own behalf.
 
 ## The PR regimes
 
-1. **The front (Scope) — a ticket PR (D38).** No feature PR exists yet, and none is opened. Scope
-   carries `run.md`, `01_scope/_source/story.md`, `01_scope/output/scope.md` and the intake cut in
-   one commit on `claude/tickets-<slug>-<YYYYMMDD>`, opens a **ticket PR** into the repo's
-   **ticket base branch** — `lib/project.sh → pipeline_base_branch`: the UAT branch where
-   `.icm/project.json` declares one, else `main` — and **merges it at once**, so the scope is
-   never trapped on one device and the stub exists for `new` the moment it lands. The ticket PR's
-   shape (branch, title `Scope: <slug> — intake cut`, label `type:tickets`, `- announce: none`,
-   `- audience: internal`) and its merge rule — verify the path guard, then squash-merge without
-   waiting for any check, `--admin` where a ruleset requires checks, a refused merge rebased and
-   retried once — live in `.claude/skills/pr-conventions/SKILL.md` → The ticket PR; read them
-   there. **The path guard:** the front touches only `.icm/runs/<scope-slug>/**` and
-   `.icm/intake/<scope-slug>/**`. Anything outside those two → STOP; never merge it — the front
-   writes markdown, never code. It is the one PR a session merges itself; the scope is still
-   reviewed by the operator before `new`, on the base branch.
+1. **The front (Scope) — a direct commit to `main` (D39 (8)).** No feature PR exists yet, and
+   none is opened. Scope carries `run.md`, `01_scope/_source/story.md`, `01_scope/output/scope.md`
+   and the intake cut in **one commit straight to `main`** (`Scope: <slug> — intake cut`) and
+   pushes it, so the scope is never trapped on one device and the stub exists for `new` the moment
+   it lands. **The path guard:** the commit touches only `.icm/runs/<scope-slug>/**` and
+   `.icm/intake/<scope-slug>/**`. Anything outside those two → STOP; never push it — the front
+   writes markdown, never code. The scope is still reviewed by the operator before `new`, on
+   `main`. Every other ticket commit — a `Plan:`/`Wrap:` cut, a stub moved — goes the same way
+   (`.claude/skills/pr-conventions/SKILL.md`). A ruleset on `main` that requires checks keeps the
+   operator's identity on its bypass list so this push lands; nothing is merged with `--admin`.
 
-   This reverses the regime's first shape: the front used to push straight to `main` under an
-   identity on the protection's bypass list. On a UAT repo that birthed a stub on `main` while its
-   run's close-out retired it on the UAT branch, so the board — reading `main` — showed finished
-   work as open until the next promotion. A stub is now born where it dies.
+   This is the regime's first shape, back for every repo. D38 had moved it to a ticket PR into a
+   "ticket base branch" because a UAT *branch* birthed a stub on one branch and retired it on
+   another; with one long-lived branch (D39) a stub is born and dies on `main`, and the board,
+   the dashboard and hygiene all read `main`.
 
 2. **The spine (Define → Release)** — **exactly one PR per run.** Define opens it once (via
    `new-run.sh` → `create_pull_request`, draft); every later stage adds commits to the same
@@ -155,16 +151,14 @@ default, and never something a session opts into on its own behalf.
    changelog page, which also says _this shipped_ and is also written on the branch before the
    merge.
 
-4. **The promotion — UAT repos only.** Where `.icm/project.json` declares `uat`, regimes 2 and 3
-   target the UAT branch instead of `main` (`new-run.sh` reads `pipeline_base_branch`; a hotfix
-   still targets `main`), the squash puts the run on the client's one fixed UAT address, and
-   `close-out.sh` appends the slug to `.icm/uat/batch.json`. Production is reached by one more
-   PR per batch: `promote-uat.sh approve --by "<who>"`, run on the client's sign-off — the
-   operator's act, never inferred — cuts `claude/promote-uat-<date>` from the UAT branch, brings
-   `origin/main` in, records the approval in `batch.json`, and opens a **ready** `type:promote`
-   lane PR into `main` through `new-run.sh`; the operator merges it from GitHub, and nothing
-   here merges. After the merge `promote-uat.sh sync` brings `main` back into the UAT branch and
-   resets the batch. `.icm/uat/CONTEXT.md` owns the rule.
+4. **The promotion — UAT repos only, and not a PR.** Where `.icm/project.json` declares `uat`,
+   regimes 2 and 3 are unchanged — every PR targets `main` — but the merge reaches the client's
+   UAT environment and builds a **Staged** production deployment instead of shipping. Production
+   is reached by a **GitHub Release**: `promote.sh approve --by "<who>"`, run on the client's
+   sign-off — the operator's act, never inferred — drafts it at the signed-off SHA; **the
+   operator publishes it on GitHub**, and the repo's release workflow migrates production,
+   promotes the staged deployment of that SHA and announces. Nothing here publishes, promotes or
+   merges. `_shared/promotion.md` owns the rule.
 
 Fast-lane PRs (`--lane`) are a degenerate shape of regime 2, finished in **one invocation**: one
 PR — **opened draft, like the spine** (blind-until-ready; the one exception is `hotfix`, which
@@ -221,10 +215,9 @@ a human in the GitHub UI (fast-lane PRs, above):
   ticked **Ready to merge** box _is_ the merge authorisation — it also attests that the operator
   has smoke-tested the preview by hand, which is why Release re-asks for no manual checks. On a
   lane PR the same attestation is the merge click itself. (The one other hard gate — the scope
-  reviewed on the ticket base branch before `new` — lives outside the PR.)
+  reviewed on `main` before `new` — lives outside the PR.)
 - **Both boxes are the operator's to tick.** The business's involvement happens earlier and ends
-  there: the scope is settled with the operator at Scope and merged into the ticket base branch
-  for review. From Define onward no gate waits on the business; the checkboxes record the
+  there: the scope is settled with the operator at Scope and committed to `main` for review. From Define onward no gate waits on the business; the checkboxes record the
   operator's decisions.
   Nothing else ever ticks them — there is no scripted exception.
 - **The boxes bind the agent, not the merge button.** What branch protection on `main` requires
@@ -258,10 +251,9 @@ minutes between the record push and the merge. So Release's step 1 runs
 moment the stage starts. Lane PRs carry `type:<lane>` only and never move.
 
 - `stage:` exactly one of `define → build → release`.
-- `type:feature` on spine PRs · `type:{bug,tweak,chore,hotfix,handover,promote}` on lane PRs
+- `type:feature` on spine PRs · `type:{bug,tweak,chore,hotfix,handover}` on lane PRs
   (the vocabulary is `lib/project.sh` → `pipeline_lanes`; add `type:hotfix` and `type:handover`
-  to `.github/labels.yml` when adopting the lanes, and `type:promote` where a UAT environment
-  is declared).
+  to `.github/labels.yml` when adopting the lanes).
 - `persona:<name>` (the repo's persona vocabulary, `.github/labels.yml`) and
   `complexity:{trivial,standard,complex}` from the spec header (spine only).
 
@@ -271,8 +263,8 @@ moment the stage starts. Lane PRs carry `type:<lane>` only and never move.
 .icm/scripts/new-run.sh <slug> --summary "<one plain sentence>" [--stub .icm/intake/<scope>/<feature>.md]
 ```
 
-Commits `.icm/runs/<slug>/` and pushes; opens the draft PR (`base:` the pipeline's base branch —
-`main`, or the UAT branch where the repo declares one, `.icm/uat/CONTEXT.md`; title = spec title,
+Commits `.icm/runs/<slug>/` and pushes; opens the draft PR (`base: main` — the one long-lived
+branch, UAT or not (D39); title = spec title,
 body = the template projected from `spec.md` by `project-body.sh`: Spec block, acceptance-criteria
 checklist mirrored unticked, both gate anchors, and the **link** to `spec.md` — never an embedded
 copy); writes/extends `run.md`; projects labels; `git mv`s a consumed stub into `_done/`. One PR
@@ -318,8 +310,8 @@ never a second PR.
    in-ticket fixes are commits on the same branch; everything else is a `intake/triage/` stub
    (`stages/04_release/CONTEXT.md` owns the rule). The code review itself is `/code-review`,
    in-session, at the spec's complexity — there is no CI review job.
-4. **Two pushes before the verdict, in this order** (stage 04, step 7): merge `origin/main` —
-   and the UAT branch, where the PR targets one — into the branch (a merge commit, never a
+4. **Two pushes before the verdict, in this order** (stage 04, step 7): merge `origin/main` into
+   the branch (a merge commit, never a
    rebase — the close-out's sibling check must see what the base branch archived since the
    branch was cut), commit and push the `## Release` record with the
    docs and the changelog page, **then** run `close-out.sh <slug>` and push its commit on its

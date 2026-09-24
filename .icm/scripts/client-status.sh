@@ -2,33 +2,37 @@
 # client-status.sh — the client's view of this project, compiled from the pipeline's own files (TEMPLATE-OWNED).
 #
 # Four questions a client asks, answered without a meeting and without reading a PR:
-#   1. Delivered to production    runs archived on main — the squash-merge, or the UAT promotion, is
-#                                 what put them there — newest first, with the date they landed.
+#   1. Delivered to production    runs archived on main — newest first, with the date they landed.
+#                                 Without UAT the merge is the release: everything archived on
+#                                 origin/main. With UAT (D39) production is the last PUBLISHED
+#                                 Release: runs archived at that release's commit.
 #   2. Ready to try on UAT        only where the repo declares a UAT environment (.icm/project.json →
-#                                 uat; .icm/uat/CONTEXT.md): the batch on the UAT branch (its
-#                                 .icm/uat/batch.json), the one fixed address to open, and whether the
-#                                 client has signed the batch off.
+#                                 uat: {target, url}; _shared/promotion.md): the runs archived on
+#                                 origin/main since the last published Release — the batch, live at
+#                                 the one fixed address, awaiting the client's word — and, with a
+#                                 GitHub route, whether a drafted Release already records that word.
 #   3. Currently being worked on  stubs spun out of an epic whose run has not merged yet (an epic's
 #                                 _done/ minus the archive) and lane work picked up from triage; with
 #                                 a GitHub route, the open pipeline PRs name each item's stage.
 #   4. Queued next                the epics with stubs still to spin out, in build order, plus a count
 #                                 of the smaller items parked in triage.
-#   Sections 3 and 4 read .icm/intake/ on the TICKET BASE BRANCH (decision D38) — the UAT branch
-#   where one is declared, else main (lib/project.sh → pipeline_base_branch): tickets are cut and
-#   closed there, and main's copy on a UAT repo lags until a promotion.
+#   Sections 3 and 4 read .icm/intake/ on origin/main — the one home of ticket state (D39 (8)).
+#   The last published Release is found in git, not through GitHub: the newest commit on
+#   origin/main carrying a tag with the github-release channel's prefix (`release/` by default) —
+#   a Release creates its tag only when published, so a draft is never mistaken for a release.
 #
 # It writes ONE markdown file, .icm/output/client-status-latest.md, in plain words: the work items'
 # own titles, never a slug, a branch, a SHA or a check name. Chores, promotions and runs announced
-# `internal` are left out unless --all. It reads git refs first — origin/main for what shipped,
-# origin/<ticket base branch> for what is in progress and queued (a live run exists only on its own
-# branch until it merges), origin/<uat.branch> for the batch — and the working tree where a ref is
-# not there, and says which at the foot of the file. GitHub is optional: without a route every live item reads "in progress".
+# `internal` are left out unless --all. It reads git refs first — origin/main for what merged and
+# for what is in progress and queued (a live run exists only on its own branch until it merges),
+# the last release tag for what is live on a UAT repo — and the working tree where a ref is not
+# there, and says which at the foot of the file. GitHub is optional: without a route every live item reads "in progress".
 #
 # Deterministic for a given repo state and --today. Reads only; nothing is sent, nothing is
 # committed. Whether the report is committed is the repo's call — on main it is what a dashboard
 # can read; regenerated on demand it is a working file. NOT a repo check: the block-local-checks
-# hook does not match it, and it runs in seconds. Every repo carries it (decision D31) — a UAT
-# environment is not needed for the report, only for its second section.
+# hook does not match it, and it runs in seconds. Every repo carries it — a UAT environment is
+# not needed for the report, only for its second section.
 #
 # Usage:
 #   .icm/scripts/client-status.sh [--out <path>] [--stdout] [--all] [--limit <n>] [--today YYYY-MM-DD]
@@ -55,7 +59,7 @@ while [ $# -gt 0 ]; do
     --today)     today="${2:-}"; printf '%s' "$today" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || die "--today must be YYYY-MM-DD"; shift 2 ;;
     --no-fetch)  fetch=0; shift ;;
     --no-github) use_github=0; shift ;;
-    -h|--help)   sed -n '2,34p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)   sed -n '2,42p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) die "unknown argument: $1 (usage: client-status.sh [--out <path>] [--stdout] [--all] [--limit <n>] [--today YYYY-MM-DD] [--no-fetch] [--no-github])" ;;
   esac
 done
@@ -69,20 +73,26 @@ project="$(project_field .name)"; [ -n "$project" ] || project="$(basename "$rep
 # --- which refs to read -------------------------------------------------------------------------------
 in_git=0; git rev-parse --is-inside-work-tree >/dev/null 2>&1 && in_git=1
 if [ "$in_git" -eq 1 ] && [ "$fetch" -eq 1 ] && git remote get-url origin >/dev/null 2>&1; then
-  GIT_TERMINAL_PROMPT=0 git fetch origin --quiet >/dev/null 2>&1 || echo "note: git fetch origin failed — reading the refs as last fetched" >&2
+  GIT_TERMINAL_PROMPT=0 git fetch origin --tags --quiet >/dev/null 2>&1 || echo "note: git fetch origin failed — reading the refs as last fetched" >&2
 fi
 main_ref=""; [ "$in_git" -eq 1 ] && git rev-parse --verify -q origin/main >/dev/null 2>&1 && main_ref="origin/main"
-# The ticket base branch (D38): the intake is read there, never from main's lagging copy on a UAT repo.
-tb="$(pipeline_base_branch)"; ticket_ref=""
-[ "$in_git" -eq 1 ] && git rev-parse --verify -q "origin/$tb" >/dev/null 2>&1 && ticket_ref="origin/$tb"
-uat_on=0; uat_ref=""; ub=""; uu=""
+# Ticket state has one home, main (D39 (8)).
+ticket_ref="$main_ref"
+# On a UAT repo, production is the last published Release (D39 (6)): the newest commit on main that
+# carries a release tag. What main holds beyond it is on UAT, awaiting the client's word.
+uat_on=0; live_ref="$main_ref"; uu=""; rel_tag=""
 if uat_declared; then
-  uat_on=1; ub="$(uat_branch)"; uu="$(uat_url)"
-  [ "$in_git" -eq 1 ] && git rev-parse --verify -q "origin/$ub" >/dev/null 2>&1 && uat_ref="origin/$ub"
+  uat_on=1; uu="$(uat_url)"; live_ref=""
+  if [ -n "$main_ref" ]; then
+    prefix="$(reporting_channel_field github-release tag_prefix 'release/')"
+    rel_line="$(git log --format='%H %D' --decorate-refs="refs/tags/${prefix}*" "$main_ref" 2>/dev/null | awk 'NF > 1 { print; exit }')"
+    if [ -n "$rel_line" ]; then
+      live_ref="${rel_line%% *}"; rel_tag="$(printf '%s' "$rel_line" | grep -oE "tag: ${prefix}[^, ]+" | head -n1 | sed 's/^tag: //')"
+    fi
+  fi
 fi
 sources="${main_ref:-the working tree}"
-[ "$tb" = "main" ] || sources="$sources; the work items from ${ticket_ref:-the working tree}"
-[ "$uat_on" -eq 1 ] && sources="$sources; the UAT batch from ${uat_ref:-the working tree}"
+[ "$uat_on" -eq 1 ] && sources="$sources; production as of ${rel_tag:-no published release yet}"
 
 # --- readers: a ref when there is one, the working tree otherwise ------------------------------------------
 read_at()    { if [ -n "$1" ]; then git show "$1:$2" 2>/dev/null; else [ -f "$2" ] && cat "$2"; fi; return 0; }
@@ -154,14 +164,14 @@ run_info() { # <ref> <dir> <slug>
     ri_line="$(printf '%s\n' "$ri_line" | strip_path_prefix | one_liner)"
   fi
   [ -n "$ri_title" ] || ri_title="$(humanise "$slug")"
-  case "$lane" in chore|promote) ri_internal=1 ;; esac
+  case "$lane" in chore|promote) ri_internal=1 ;; esac   # promote: an archived D31 promotion run
   printf '%s\n%s\n' "$notes" "$lnotes" | grep -qiE '^[[:space:]]*-?[[:space:]]*(announce|audience):[[:space:]]*internal' && ri_internal=1
   return 0
 }
 
-# --- 1. delivered: the archive on main, dated by the commit that added each folder -------------------------
+# --- 1. delivered: the archive on main (at the last release, on a UAT repo), dated by the commit ---------
 declare -A ddate=() on_main=()
-log_ref="$main_ref"; [ -n "$log_ref" ] || { [ "$in_git" -eq 1 ] && log_ref="HEAD"; }
+log_ref="$live_ref"; [ -n "$log_ref" ] || { [ "$uat_on" -eq 0 ] && [ "$in_git" -eq 1 ] && log_ref="HEAD"; }
 if [ -n "$log_ref" ]; then
   d=""
   while IFS= read -r line; do
@@ -175,49 +185,47 @@ deliv_rows=()
 while IFS= read -r slug; do
   [ -n "$slug" ] || continue
   on_main[$slug]=1
-  run_info "$main_ref" "$archive/$slug" "$slug" || continue
+  run_info "$live_ref" "$archive/$slug" "$slug" || continue
   [ "$ri_internal" -eq 1 ] && [ "$all" -eq 0 ] && continue
   deliv_rows+=("$(printf '%s\t%s\t%s\t%s' "${ddate[$slug]:-0000-00-00}" "$slug" "$ri_title" "$ri_line")")
-done < <(ls_dirs_at "$main_ref" "$archive")
+done < <( { [ "$uat_on" -eq 1 ] && [ -z "$live_ref" ]; } || ls_dirs_at "$live_ref" "$archive")
 deliv_sorted=""
 [ "${#deliv_rows[@]}" -eq 0 ] || deliv_sorted="$(printf '%s\n' "${deliv_rows[@]}" | sort -t"$(printf '\t')" -k1,1r -k2,2)"
 deliv_n="${#deliv_rows[@]}"
 
-# --- 2. the UAT batch, as the UAT branch holds it ---------------------------------------------------------
+# --- 2. on UAT: archived on main since the last published Release (D39 (6)) --------------------------
 declare -A in_uat=()
 uat_rows=(); approved="false"; approved_by=""; approved_on=""
-if [ "$uat_on" -eq 1 ]; then
-  bj="$(read_at "$uat_ref" ".icm/uat/batch.json")"
-  printf '%s' "$bj" | jq -e . >/dev/null 2>&1 || bj='{}'
-  approved="$(printf '%s' "$bj" | jq -r '.client_approved // false')"
-  approved_by="$(printf '%s' "$bj" | jq -r '.approved_by // ""')"
-  approved_on="$(printf '%s' "$bj" | jq -r '.approved_on // ""')"
+if [ "$uat_on" -eq 1 ] && [ -n "$main_ref" ]; then
   while IFS= read -r slug; do
     [ -n "$slug" ] || continue
+    [ -n "${on_main[$slug]:-}" ] && continue
+    run_info "$main_ref" "$archive/$slug" "$slug" || continue
     in_uat[$slug]=1
-    if exists_at "$uat_ref" "$archive/$slug/run.md" && run_info "$uat_ref" "$archive/$slug" "$slug"; then :
-    else ri_title="$(humanise "$slug")"; ri_line=""; ri_internal=0; fi
     [ "$ri_internal" -eq 1 ] && [ "$all" -eq 0 ] && continue
     uat_rows+=("$(printf '%s\t%s\t%s' "$slug" "$ri_title" "$ri_line")")
-  done < <(printf '%s' "$bj" | jq -r '(.stubs // [])[] | if type == "object" then (.slug // empty) else . end')
-  # Archived on the UAT branch, not on main, not in the batch: it IS on UAT — list it, and say so.
-  if [ -n "$uat_ref" ]; then
-    while IFS= read -r slug; do
-      [ -n "$slug" ] || continue
-      [ -n "${on_main[$slug]:-}" ] && continue
-      [ -n "${in_uat[$slug]:-}" ] && continue
-      run_info "$uat_ref" "$archive/$slug" "$slug" || continue
-      in_uat[$slug]=1
-      [ "$ri_internal" -eq 1 ] && [ "$all" -eq 0 ] && continue
-      echo "[WARN] $slug is archived on $ub but not on main and not in .icm/uat/batch.json — listed under UAT; promote-uat.sh status shows the same gap" >&2
-      uat_rows+=("$(printf '%s\t%s\t%s' "$slug" "$ri_title" "$ri_line")")
-    done < <(ls_dirs_at "$uat_ref" "$archive")
-  fi
+  done < <(ls_dirs_at "$main_ref" "$archive")
 fi
 uat_n="${#uat_rows[@]}"
+# A drafted Release is the client's word recorded, not yet published (promote.sh approve). Read
+# only with a GitHub route; without one the section says "awaiting".
+if [ "$uat_on" -eq 1 ] && [ "$uat_n" -gt 0 ] && [ "$use_github" -eq 1 ] && [ "$in_git" -eq 1 ] && git remote get-url origin >/dev/null 2>&1; then
+  # shellcheck source=lib/gh.sh
+  if source "$here/lib/gh.sh" 2>/dev/null && { [ -n "${gh_token:-}" ] || (command -v gh >/dev/null 2>&1 && env -u GITHUB_TOKEN -u GH_TOKEN gh auth status >/dev/null 2>&1); }; then
+    rresp="$(gh_api GET "/repos/${repo}/releases?per_page=30" 2>/dev/null)" || rresp=""
+    if [ "$(printf '%s' "$rresp" | tail -n1)" = "200" ]; then
+      draft="$(printf '%s' "$rresp" | sed '$d' | jq -c '[.[] | select(.draft == true and ((.body // "") | test("(?m)^- promote-sha: [0-9a-f]{40}")))] | first // empty' 2>/dev/null)"
+      if [ -n "$draft" ]; then
+        approved="true"
+        approved_by="$(printf '%s' "$draft" | jq -r '(.body // "") | capture("(?m)^- approved-by: (?<v>.+)$").v // ""' 2>/dev/null)"
+        approved_on="$(printf '%s' "$draft" | jq -r '(.body // "") | capture("(?m)^- approved-on: (?<v>[0-9-]+)").v // ""' 2>/dev/null)"
+      fi
+    fi
+  fi
+fi
 
 # --- 3. in progress: spun out, not merged — and the open PRs' stages when GitHub answers -----------------
-# The intake is read on the ticket base branch; "merged" is the archive on main or on UAT.
+# The intake is read on main; "merged" is the archive on main (live, or on UAT).
 declare -A p_title=() p_stage=() p_epic=() p_lane=()
 p_order=()
 add_progress() { # <slug> <title> <stage> <epic-title> <lane>
@@ -264,7 +272,6 @@ elif [ "$in_git" -eq 1 ] && git remote get-url origin >/dev/null 2>&1; then
         [ -n "$slug" ] || continue
         stage="in progress"; lane="feature"
         case ",$labels," in
-          *,type:promote,*)  continue ;;
           *,type:chore,*)    lane="chore" ;;
           *,type:bug,*)      lane="bug" ;;
           *,type:tweak,*)    lane="tweak" ;;
@@ -299,7 +306,7 @@ for slug in "${p_order[@]+"${p_order[@]}"}"; do
   prog_n=$((prog_n + 1))
 done
 
-# --- 4. queued: the epics with stubs still to spin out, in build order (the ticket base branch) -----------
+# --- 4. queued: the epics with stubs still to spin out, in build order (on main) --------------------------
 queue_md=""; queued_n=0
 while IFS= read -r epic; do
   [ -n "$epic" ] || continue

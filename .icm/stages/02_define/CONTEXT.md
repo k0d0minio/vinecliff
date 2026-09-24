@@ -81,14 +81,10 @@ overruns on a one-line `Context budget:` note in `spec.md`.
    `project.md`, set `status.md` (`phase: define`), write `handoff.md` ("tick Spec approved, then
    `build <slug>`"), commit and push those with the run.
    **Branch check first:** the script opens the PR from the _current_ branch, so start from a
-   fresh branch off the pipeline's **base branch** before running it — `origin/main`, or the UAT
-   branch where the repo declares one (`.icm/project.json` → `uat.branch`;
-   `lib/project.sh → pipeline_base_branch`; `.icm/uat/CONTEXT.md`) — never a branch whose PR has
-   already merged. That base is also the **ticket base branch** (D38): the stub you are consuming
-   landed there through Scope's ticket PR, so a branch cut from it already carries it. The PR
-   targets that same base; on a UAT repo the script brings `origin/main` in itself when it finds
-   it missing (a hotfix not yet synced), and warns when the branch was not cut from the UAT
-   branch.
+   fresh branch off `origin/main` before running it — the one long-lived branch, UAT or not
+   (D39) — never a branch whose PR has already merged. The stub you are consuming landed on
+   `main` in Scope's direct commit, so a branch cut from it already carries it. The PR targets
+   `main`.
 
 6. **Revising — `revise <slug> "<what to change>"`.** The one command that changes an existing
    spec; it enters here, not at step 1. Resolve the run first (`_shared/stage-preamble.md` —

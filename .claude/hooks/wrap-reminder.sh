@@ -2,8 +2,8 @@
 # wrap-reminder.sh — canonical estate hook (icm-board _system/template/claude/hooks/).
 # Stop hook. Two questions, each asked once, neither ever acted on:
 #
-#   1. Uncommitted .icm/ changes — the board reads the ticket base branch, so a stub that
-#      has not landed there does not exist.
+#   1. Uncommitted .icm/ changes — the board reads main, so an unpushed stub does not
+#      exist. Ticket state has one home in every repo, main, reached by a direct commit (D39).
 #   2. Work shipped, stub left open — this branch has commits that changed files outside
 #      .icm/, and an open stub matches the work (the branch is named for its slug, or a
 #      legacy ticket ID appears in a commit subject), while no commit on the branch
@@ -15,14 +15,7 @@
 # administration, not work; and a branch that touched the stub file at all has already
 # engaged with it. It asks; it never moves a stub. Gates are human checkboxes. Honours
 # stop_hook_active so it can never loop, and is silent (exit 0) on any error, outside a
-# repo, or where there is no origin/<base> to compare against.
-#
-# <base> is the repo's TICKET BASE BRANCH (decision D38): `.icm/project.json` → uat.branch
-# where one is declared, else main — the answer lib/project.sh → pipeline_base_branch gives,
-# read here with jq alone because the hook also runs in repos with no .icm/scripts/. A branch
-# cut from origin/uat is compared with origin/uat, so UAT's own commits are not "this branch's";
-# on a UAT repo a hotfix or knowledge-lane branch is cut from main instead, so the nearer of the
-# two (fewer commits since the merge-base) is the one compared.
+# repo, or where there is no origin/main to compare against.
 set -uo pipefail
 
 input="$(cat 2>/dev/null || true)"
@@ -35,34 +28,20 @@ repo="${CLAUDE_PROJECT_DIR:-.}"
 command -v git >/dev/null 2>&1 || exit 0
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-# The ticket base branch: uat.branch when .icm/project.json declares one, else main.
-base_branch=""
-if [[ -f "$repo/.icm/project.json" ]] && command -v jq >/dev/null 2>&1; then
-  base_branch="$(jq -r '.uat.branch // empty | strings' "$repo/.icm/project.json" 2>/dev/null || true)"
-fi
-[[ -n "$base_branch" ]] || base_branch="main"
-
 # ── 1. uncommitted ticket work ───────────────────────────────────────────────
 dirty="$(git -C "$repo" status --porcelain -- .icm 2>/dev/null || true)"
 if [[ -n "$dirty" ]]; then
   cat <<'JSON'
-{"decision": "block", "reason": "Uncommitted changes under .icm/ — the board reads the ticket base branch, so ticket work that has not landed there does not exist. Wrap per the estate discipline: cut what's left into .icm/intake/ (epics or triage), commit only .icm/ paths (message 'Plan: …' or 'Wrap: …') and land them on the ticket base branch the way the pr-conventions skill says — or tell Jamie it is being left deliberately."}
+{"decision": "block", "reason": "Uncommitted changes under .icm/ — the tickets board reads main, so unpushed ticket work does not exist. Wrap per the estate discipline: cut what's left into .icm/intake/ (epics or triage), then commit only .icm/ paths (message 'Plan: …' or 'Wrap: …') and push them straight to main — or tell Jamie it is being left deliberately."}
 JSON
   exit 0
 fi
 
 # ── 2. work shipped, stub left open ──────────────────────────────────────────
-# A declared UAT branch not on origin yet (promote-uat.sh init's first step) — compare with main.
-git -C "$repo" rev-parse --verify -q "origin/$base_branch" >/dev/null 2>&1 || base_branch="main"
-git -C "$repo" rev-parse --verify -q "origin/$base_branch" >/dev/null 2>&1 || exit 0
-if [[ "$base_branch" != "main" ]] && git -C "$repo" rev-parse --verify -q origin/main >/dev/null 2>&1; then
-  n_base="$(git -C "$repo" rev-list --count "origin/$base_branch..HEAD" 2>/dev/null || echo 0)"
-  n_main="$(git -C "$repo" rev-list --count "origin/main..HEAD" 2>/dev/null || echo 0)"
-  (( n_main < n_base )) && base_branch="main"
-fi
+git -C "$repo" rev-parse --verify -q origin/main >/dev/null 2>&1 || exit 0
 head_sha="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
-base="$(git -C "$repo" merge-base "origin/$base_branch" HEAD 2>/dev/null || true)"
-# Nothing on this branch that origin/<base> does not already have.
+base="$(git -C "$repo" merge-base origin/main HEAD 2>/dev/null || true)"
+# Nothing on this branch that origin/main does not already have.
 [[ -n "$head_sha" && -n "$base" && "$base" != "$head_sha" ]] || exit 0
 
 # Did any commit here change something outside .icm/? If not, it's ticket admin only.

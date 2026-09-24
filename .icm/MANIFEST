@@ -14,7 +14,8 @@
 # `setup.sh --fix`, never synced), so `setup.sh` can answer "complete? current?" offline, with no
 # icm-board in reach. A file the template retires leaves this list and is REPORTED by
 # `icm-sync.sh` for the operator to `git rm` — never deleted by a script (retired so far:
-# `scripts/notify.sh`, replaced by `scripts/report.sh`).
+# `scripts/notify.sh`, replaced by `scripts/report.sh`; `uat/CONTEXT.md` and `scripts/promote-uat.sh`,
+# replaced by `_shared/promotion.md` and `scripts/promote.sh` — D39).
 #
 # `skills/<name>/` (three seeded capability skills — `skills/README.md`) and `_shared/run-pack/`
 # (the seven canonical run files `run-pack.sh` seeds into every run) are template-owned like the
@@ -37,13 +38,13 @@ T lanes/knowledge/CONTEXT.md
 T lanes/hotfix/CONTEXT.md
 T lanes/handover/CONTEXT.md
 T intake/CONTEXT.md
-T uat/CONTEXT.md
 T _shared/github.md
 T _shared/ci.md
 T _shared/stage-preamble.md
 T _shared/scope-template.md
 T _shared/conventions.md
 T _shared/template-change.md
+T _shared/promotion.md
 T _shared/run-pack/project.md
 T _shared/run-pack/plan.md
 T _shared/run-pack/tasks.md
@@ -80,7 +81,7 @@ T scripts/usage-snapshot.sh
 T scripts/env.sh
 T scripts/setup.sh
 T scripts/client-status.sh
-T scripts/promote-uat.sh
+T scripts/promote.sh
 T scripts/list-skills.sh
 T scripts/db-branch.sh
 T scripts/db-env.sh

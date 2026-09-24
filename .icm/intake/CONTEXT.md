@@ -8,20 +8,16 @@ the Scope stage's job and lives in `.icm/stages/01_scope/CONTEXT.md` (step 6). T
 `/pipeline decompose` subcommand; the cut is the last thing Scope does.
 
 The stub folder is the only state (no branch or run PR of its own); Scope lands it with
-`scope.md` through one ticket PR into the repo's **ticket base branch**. Re-cutting after the human edits `breakdown.md` regenerates the stubs. **Every scope
+`scope.md` in one direct commit to `main`. Re-cutting after the human edits `breakdown.md` regenerates the stubs. **Every scope
 gets an intake folder, however small** — a single-PR scope gets exactly one stub whose
 `feature-slug` is the scope slug itself.
 
-**Where ticket state lives (D38).** This folder has one home: the **ticket base branch** —
-`lib/project.sh → pipeline_base_branch`, the UAT branch where `.icm/project.json` declares one,
-else `main`. The board and every script that reads the queue read it there; on a UAT repo `main`
-carries a lagging copy that only promotions update, and nothing reads it for tickets. Every write
-reaches it through a PR: inside a run, the run's own PR (the stub it consumes, the triage stubs it
-parks, the close-out's archive move); outside a run — a cut, a drop, a `_done/` move, a parked
-finding, a `triage batch` or `prune` — a **ticket PR** the session merges at once
-(`.claude/skills/pr-conventions/SKILL.md` → The ticket PR). Never a direct push. The hotfix lane
-and the knowledge lane merge into `main`, so on a UAT repo what they move reaches this home only
-through `promote-uat.sh sync` (`.icm/uat/CONTEXT.md`).
+**Where ticket state lives (D39 (8)).** This folder has one home: `main`, in every repo, UAT or
+not. The board and every script that reads the queue read it there. Every write reaches it one of
+two ways: inside a run, the run's own PR (the stub it consumes, the triage stubs it parks, the
+close-out's archive move); outside a run — a cut, a drop, a `_done/` move, a parked finding, a
+`triage batch` or `prune` — a **direct commit to `main`**, pushed by the session
+(`.claude/skills/pr-conventions/SKILL.md`). No ticket PR, no second branch to reconcile.
 
 One audit may write here too, where the repo ships one (`_shared/project-rules.md` → Capability
 skills): a codebase-audit skill fired daily by a Claude Routine parks **at most one** finding a day

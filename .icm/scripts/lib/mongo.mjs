@@ -13,8 +13,9 @@
 // connection string before it reaches stderr. The database names the writes accept are checked
 // here as well as in the callers:
 //   drop    only `run_*` and `preview_*`; never `database.mongodb.production_name` or
-//           `preview_name`, whatever their shape; never the UAT database (`preview_<uat.branch>`)
-//           unless the caller says `--uat` (db-env.sh reset-uat, on the operator's --apply).
+//           `preview_name`, whatever their shape; never the UAT database (`database.mongodb.uat_name`,
+//           read when uat is declared — D39) unless the caller says `--uat` (db-env.sh reset-uat,
+//           on the operator's --apply) — and `--uat` drops that one name only, whatever its shape.
 //   forget  only `run_*` — it deletes the migration runner's records of named migrations, which
 //           is exactly what a re-stamp does to them (the idempotency proof).
 //
@@ -36,7 +37,6 @@ import { readFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { previewDbName } from "./db-name.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
@@ -57,7 +57,7 @@ const dbc = pj.database ?? {};
 const mdb = dbc.mongodb ?? {};
 const urlEnv = dbc.url_env || "MONGODB_URI";
 const protectedNames = [mdb.production_name, mdb.preview_name].filter(Boolean);
-const uatDb = pj.uat?.branch && mdb.previews === "branch" ? previewDbName(pj.uat.branch, mdb.limits?.name_bytes) : "";
+const uatDb = pj.uat?.target && pj.uat?.url ? (mdb.uat_name || "") : "";
 
 function loadDriver() {
   const paths = [pj.migrations?.path ?? pj.migrations_path ?? []].flat().filter(Boolean);
@@ -83,9 +83,14 @@ function canon(v, keepOrder = false) {
 }
 
 function guardDrop(name, uat) {
+  if (uat) {
+    if (!uatDb || name !== uatDb) fail(`refusing '${name}' with --uat — it is not the declared UAT database (database.mongodb.uat_name)`);
+    if (protectedNames.includes(name)) fail(`refusing '${name}' — it is database.mongodb.production_name or preview_name`);
+    return;
+  }
   if (!/^(run|preview)_[a-z0-9_]+$/.test(name)) fail(`refusing '${name}' — only run_* and preview_* databases are the pipeline's`);
   if (protectedNames.includes(name)) fail(`refusing '${name}' — it is database.mongodb.production_name or preview_name`);
-  if (uatDb && name === uatDb && !uat) fail(`refusing '${name}' — it is the UAT database (db-env.sh reset-uat --apply is its one reset)`);
+  if (uatDb && name === uatDb) fail(`refusing '${name}' — it is the UAT database (db-env.sh reset-uat --apply is its one reset)`);
 }
 
 const [verb, ...args] = process.argv.slice(2);

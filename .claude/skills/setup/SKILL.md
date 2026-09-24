@@ -72,9 +72,10 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
      it under Storage → Open in Neon — an id like `nameless-sea-98952497`, not a secret), the
      NAME of the variable that holds a Neon API key (`NEON_API_KEY` unless you keep another), the
      production branch (`main` unless renamed), and `previews: vercel` when the Vercel
-     integration should create a database per preview deployment — with a UAT environment
-     declared, that same toggle gives the UAT branch a persistent database of its own
-     (`preview/<uat>`, `.icm/uat/CONTEXT.md` → The UAT database). For a **MongoDB** cluster
+     integration should create a database per preview deployment. With a UAT environment
+     declared, also the NAME of the UAT database — `neon.uat_branch` (`uat` by convention; a
+     persistent child of production the operator creates) or `mongodb.uat_name`
+     (`_shared/promotion.md` → The UAT database). For a **MongoDB** cluster
      (`provider: mongodb`, decision D35) — names only, never a URI: the NAME of the variable
      holding the cluster URI (`url_env`, `MONGODB_URI` unless you keep another), the variable the
      app reads its database name from (`mongodb.name_env`, `MONGODB_DATABASE_NAME`), the names of
@@ -96,10 +97,15 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
      ecosystem needs its command (pip-audit, cargo audit), or leave it empty."
    - "`support`: `none`, `basic` or `retainer`? Where is the fail-safe page? Which variable
      carries the Sentry DSN?"
-   - "`uat`: does this project need a **persistent UAT environment** the client signs batches
-     off on before anything reaches production? If yes: the branch name (`uat` by convention)
-     and the one fixed address they will open (a domain you assign to that branch in Vercel) —
-     never a per-batch preview. If no, leave it undeclared: runs ship on the merge, as before."
+   - "`uat`: does this project need a **UAT environment** the client signs batches off on before
+     anything reaches production? If yes: the slug of the Vercel **custom environment** it will
+     be (`uat` by convention — Pro only, one per project) and the one fixed address they will
+     open (the domain attached to that environment) — never a per-batch preview. Production then
+     stops following `main`: every merge is Staged and promoted when you publish the Release
+     `promote.sh approve` drafts. If no, leave it undeclared: every merge ships, as before."
+     Both `target` and `url`, or neither. **Refuse the declaration** when `setup.sh` says the team
+     allows no custom environment ("UAT requires a Pro team") — UAT then stays undeclared. There
+     is no UAT branch: never write `uat.branch`.
    - "`alert` maps to no channel — the red CI job is the alert. Keep that, and record it?"
    Every question has an escape hatch: "don't know" leaves the stub value and the report line.
 
@@ -111,12 +117,14 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
    `_shared/knowledge-map.md` where the repo has a docs tree, `scripts/format.sh` / `lint.sh` on
    the repo's own tools or left as `SKIP` stubs, `runs/README.md`. Nothing else: `T` files are
    the template's, code is the pipeline's. **When a UAT environment was declared**, also run
-   `.icm/scripts/promote-uat.sh init`: it writes the empty `.icm/uat/batch.json` and prints the
-   acts only the operator can perform — push the branch once, protect it like `main`, assign the
-   domain to it in Vercel, choose its environment's variables, add `type:promote` to the labels
-   file. Record who signs off and how under `_shared/project-rules.md` → People and gates, and
-   the acts still owed there. Never create the branch or touch Vercel from here
-   (`.icm/uat/CONTEXT.md`). **When a Neon project was declared**, also run
+   `.icm/scripts/promote.sh init`: it prints the acts only the operator can perform — the custom
+   environment and its domain, Auto-assign Custom Production Domains off, the UAT database and
+   its variables, the environment deploying `main` — and seed the reference
+   `.github/workflows/release.yaml` (it is the promotion) and, where production is migrated from
+   CI, the reference `db-migrate.yml` shape (`workflow_call`; `uat-deploy.yaml` only where
+   Vercel refuses branch tracking). Record who signs off and how under
+   `_shared/project-rules.md` → People and gates, and the acts still owed there. Never touch
+   Vercel from here (`.icm/_shared/promotion.md`). **When a Neon project was declared**, also run
    `.icm/scripts/db-env.sh init`: it prints the database's one-time acts — the API key and where
    it lives (the shell, and this repository's Actions secrets through `env.sh add … --ci --github
    secret`), the integration's Preview-branching toggle, the migrate step in the build, protecting

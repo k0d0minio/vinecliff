@@ -9,7 +9,7 @@
 # Unlike lib/vercel.sh this file DOES carry write verbs — create, delete and reset a branch —
 # because a Neon branch is a run's or an environment's working copy, never production, and every
 # write here is scoped to a name the pipeline gave: `run/<slug>` (db-branch.sh), `preview/<git
-# branch>` (the Vercel integration's own naming) or the UAT branch (`uat/CONTEXT.md`). The
+# branch>` (the Vercel integration's own naming) or the UAT branch (`_shared/promotion.md`). The
 # project's default (production) branch is never written, deleted or reset by anything in this
 # file, whatever a caller asks; the UAT branch is never deleted; a name outside those shapes is
 # refused before any request is made.
@@ -158,7 +158,7 @@ neon_delete_branch() { # <id> <name>
   local id="$1" name="$2" resp
   case "$name" in run/*|preview/*) : ;; *) die "refusing to delete Neon branch '$name' — only run/* and preview/* branches are the pipeline's to delete" ;; esac
   [ -n "$NEON_BRANCHES" ] || neon_load_branches || die "could not read the project's branches before deleting $name — nothing deleted"
-  [ "$name" != "$(neon_uat_branch)" ] || die "refusing to delete the UAT branch '$name' (uat/CONTEXT.md)"
+  [ "$name" != "$(neon_uat_branch)" ] || die "refusing to delete the UAT branch '$name' (_shared/promotion.md → The UAT database)"
   [ "$id" != "$(neon_default_branch_id)" ] || die "refusing to delete the default (production) branch"
   resp="$(neon_api DELETE "/projects/${neon_project}/branches/${id}")" || die "could not delete branch $name"
   neon_ok "$resp" || die "DELETE …/branches/$id ($name) answered HTTP $(neon_code "$resp"): $(neon_err "$resp")"

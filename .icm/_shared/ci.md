@@ -154,15 +154,12 @@ disable, is the repo's own (`_shared/project-rules.md` → The factory); a branc
 pattern still previews everything, so a new branch convention has to be added to each quiet
 project's file.
 
-**Ticket PRs — a recipe for cost, never a gate** (decision D38; the `pr-conventions` skill → The
-ticket PR). A ticket PR carries only `.icm/` markdown and is merged at once, waiting for no check —
-but its push can still start a preview (and with it a Neon `preview/<branch>` branch or a Mongo
-`preview_<branch>` database), and its merge rebuilds the base branch — on a UAT repo, the client's
-fixed address — for a markdown change. A repo that wants neither adds, per deploy project, in its
-`vercel.json`:
+**Ticket commits — a recipe for cost, never a gate** (decision D39 (8); the `pr-conventions`
+skill). A ticket commit carries only `.icm/` markdown and goes straight to `main`, waiting for no
+check — but its push still rebuilds production (on a UAT repo: the UAT environment and a Staged
+production build) for a markdown change. A repo that wants none of that adds, per deploy project,
+in its `vercel.json`:
 
-- `"git": { "deploymentEnabled": { "claude/tickets-*": false } }` — the ticket branch creates no
-  deployment at all (the quiet-project mechanism above; keep the repo's other patterns beside it).
 - an ignore step that skips a commit touching only `.icm/`:
   `"ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':!.icm'"` (exit 0 skips the build) — or, where
   the project already has one, the two joined: `git diff --quiet HEAD^ HEAD -- ':!.icm' || npx
@@ -171,14 +168,14 @@ fixed address — for a markdown change. A repo that wants neither adds, per dep
 Both are the repo's own edits, recorded in `_shared/project-rules.md` → The factory. Neither is
 required: the merge never waits for a deployment, so a repo without them only pays the build.
 
-**The UAT branch, where the repo declares one, is a preview deployment with a fixed address**
-(`.icm/project.json` → `uat`; `.icm/uat/CONTEXT.md`). A squash into it is a push like any other:
-Vercel builds the affected product projects for that commit, and the domain the operator assigned
-to the branch (or the branch alias) always serves the branch's newest READY deployment — which is
-what keeps the client's address constant while the batch under it changes. It runs on the
-**preview** environment's variables unless the project attaches a custom environment to the
-branch. It is not a PR preview and carries no PR status: Release reads it once, after the merge,
-with `deploy-status.sh --sha <merge-sha> --uat`, and production is read only after the promotion.
+**Where the repo declares UAT, every push to `main` builds twice** (`.icm/project.json` → `uat`;
+`_shared/promotion.md`; D39): once for the Vercel custom environment `uat.target` — its own
+variables, its own database, the domain `uat.url` always serving its newest READY deployment,
+which keeps the client's address constant while the batch under it changes — and once for
+production, held **Staged** (Auto-assign Custom Production Domains off) until the release workflow
+promotes it on a published Release. Neither is a PR preview and neither carries a PR status:
+Release reads the UAT one once, after the merge, with `deploy-status.sh --sha <merge-sha> --uat`,
+and production is read by the release workflow after it promoted.
 
 **An absent status is not a skipped one, and neither is a pass you may quote.** Two different
 things read as "not built":
