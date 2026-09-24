@@ -61,7 +61,9 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
      the read is `SKIP` and nobody is told production is down." Ask it whenever the report
      carries the `health_endpoint empty` line — it is a `[WARN]` for as long as the repo
      deploys somewhere and has no endpoint, so a repo that skipped it is asked again next run.
-   - "`required_checks`: which check-run names must be green before a merge?" · "`personas`?"
+   - "`required_checks`: empty by default — the deploy status is the verdict and the quality job
+     is advisory (`_shared/ci.md` → the cost floor); which check-run names, if any, must this
+     repo still wait for, and why?" · "`personas`?"
    - "`migrations`: where do they live, are they reversible, which tool applies them (flyway /
      prisma / drizzle / mongodb / sql), and does that tool accept out-of-order stamps? New ones
      are named `V<17 digits>__<name>.sql` (`stamp: millis`) unless you keep the legacy `seconds`
@@ -73,9 +75,13 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
      NAME of the variable that holds a Neon API key (`NEON_API_KEY` unless you keep another), the
      production branch (`main` unless renamed), and `previews: vercel` when the Vercel
      integration should create a database per preview deployment. With a UAT environment
-     declared, also the NAME of the UAT database — `neon.uat_branch` (`uat` by convention; a
-     persistent child of production the operator creates) or `mongodb.uat_name`
-     (`_shared/promotion.md` → The UAT database). For a **MongoDB** cluster
+     declared, also the UAT database — on Neon the project id of the **second Marketplace
+     database** (`neon.nonprod_project_id`: Vercel → Storage → Create Database → Neon,
+     `uat-<repo>`, then Open in Neon; never production's — D41) and `neon.reset_command`, the
+     repo's own command that empties it and re-migrates and re-seeds it (`npx prisma migrate
+     reset --force`, or the repo's script; empty is allowed), or on MongoDB `mongodb.uat_name`
+     (`_shared/promotion.md` → The UAT database). Never write `neon.uat_branch` — the
+     named-branch shape is retired and `setup.sh` fails it. For a **MongoDB** cluster
      (`provider: mongodb`, decision D35) — names only, never a URI: the NAME of the variable
      holding the cluster URI (`url_env`, `MONGODB_URI` unless you keep another), the variable the
      app reads its database name from (`mongodb.name_env`, `MONGODB_DATABASE_NAME`), the names of
@@ -128,7 +134,9 @@ is icm-board's checkout (`~/Apps/_system/template`); `ICM_TEMPLATE` in the shell
    `.icm/scripts/db-env.sh init`: it prints the database's one-time acts — the API key and where
    it lives (the shell, and this repository's Actions secrets through `env.sh add … --ci --github
    secret`), the integration's Preview-branching toggle, the migrate step in the build, protecting
-   the production branch — and, with `previews: vercel`, `setup.sh --fix --template <path>` seeds
+   the production branch, and on a UAT repo the second Marketplace database's acts (its
+   connection on the UAT environment + Preview, production's on Production only, Neon Auth to
+   match production's) — and, with `previews: vercel`, `setup.sh --fix --template <path>` seeds
    the reference `.github/workflows/neon-cleanup.yaml`. Record the topology and the acts still
    owed under `_shared/project-rules.md` → The factory → The environments' databases. Never
    create a Neon branch, flip the toggle or set a build command from here: `db-env.sh` reads and

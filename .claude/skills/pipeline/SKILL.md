@@ -105,9 +105,10 @@ the source, settles the scope in session and cuts the intake batch in one sittin
    Verify are the instructions. Load only the files its Inputs section names.
    **CI is read one way everywhere:** `.icm/scripts/ci-status.sh <slug>` → `GREEN | RED | PENDING`
    (`.icm/_shared/ci.md`). No stage hands off or merges on anything but a settled `GREEN`, and
-   the script names the tier it settled: drafts run the cheap tier with **no previews**
-   (blind-until-ready); Build flips ready **then pushes**, and the full gate plus the affected
-   product-app previews settle on that head.
+   the script names the tier it settled: a draft owes CI nothing and builds **no previews**
+   (blind-until-ready — the session's `format.sh` / `lint.sh` are the pre-flip check); Build
+   flips ready **then pushes**, and the advisory quality job plus the affected product-app
+   previews settle on that head.
    **Pipeline PRs are never subscribed to PR activity** (`.icm/_shared/github.md` → PR events) —
    the one blocking script call is the only CI read, so no Vercel event churn ever reaches the
    session.
