@@ -1,7 +1,7 @@
 # Stub: No CI runs on a pull request
 
 - lane: chore
-- found-by: pipeline template sync (k0d0minio/vinecliff#17) · 2026-09-23
+- found-by: pipeline template sync (k0d0minio/vinecliff#17) · 2026-09-23 — re-cut to D43 on 2026-09-26 (estate audit)
 - priority: P2
 
 ## Problem
@@ -13,14 +13,15 @@ by Vercel's build alone: `npm run lint`, a typecheck and `npm test` (the booking
 
 ## Proposed change
 
-Add `.github/workflows/ci.yml` on `pull_request` (and `push` to `main`): `npm ci`, `next lint`,
-`tsc --noEmit`, `npm test`, one job whose name becomes the required check. Then set
-`required_checks` in `.icm/project.json` to that check-run name and update
-`.icm/_shared/project-rules.md` → Required CI checks.
+The D43 shape, not a required check: seed the reference `quality.yaml` (icm-board
+`_system/template/github-pipeline/workflows/quality.yaml` — one advisory job named
+`Quality (advisory)`, `pull_request` on ready heads only, path-filtered, never on `push` to
+`main`) with this repo's `npm ci`, `next lint`, `tsc --noEmit`, `npm test` as its three steps.
+`required_checks` stays empty — the deploy status is the verdict — and `setup.sh` no longer warns
+on it. Record the job under `.icm/_shared/project-rules.md` → The factory.
 
 ## Prompt
 
-In the vinecliff repo, add a CI workflow that runs lint, typecheck and the unit tests on every
-pull request. Read `.icm/intake/triage/ci-on-pull-requests.md` for context. Never run the
-checks locally — push and read the result from CI. Record the check-run name in
-`.icm/project.json` → `required_checks` and in `.icm/_shared/project-rules.md`.
+In the vinecliff repo, read `.icm/intake/triage/ci-on-pull-requests.md`. Copy the reference
+`quality.yaml` from the icm-board template (or `/setup`, which seeds it once), fill its three
+`run:` steps with this repo's own commands, never run them locally — push and read the result.

@@ -1,4 +1,5 @@
 # Stub: The settings deny list blocks reading .env.example
+> Done elsewhere — retired 2026-09-26 (estate audit): fixed by 7654127 — `.claude/settings.json:5-12` denies the secret env files by name and `.env.example` is readable.
 
 - lane: chore
 - found-by: pipeline template sync (k0d0minio/vinecliff#17) · 2026-09-23
