@@ -66,10 +66,11 @@
     "provider": "neon",
     "neon": {
       "project_id": "broad-lake-67509282",
+      "nonprod_project_id": "",
       "api_key_env": "NEON_API_KEY",
       "production_branch": "main",
       "previews": "none",
-      "uat_branch": ""
+      "reset_command": ""
     }
   },
   "security": {
