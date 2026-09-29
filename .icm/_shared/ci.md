@@ -223,9 +223,9 @@ and production is read by the release workflow after it promoted.
 things read as "not built":
 
 - **Absent** — a quiet project on a working branch, or any project the native unaffected-skip
-  filtered out platform-side. No deployment object exists, so nothing to read. `ci-status.sh`
-  cannot wait on it and does not count it, which is why a PR settles on the affected preview
-  projects' statuses only, never on one per project the repo deploys.
+  filtered out platform-side. No deployment object exists, so nothing to read. A quiet project is
+  never waited on. A **product** project with no status on a ready head is not absent yet — it is
+  *unposted*, and the next section says how it is resolved.
 - **`state: success` with a skip description** — Vercel posts `success` for a project it did not
   build, and only the `description` says so. Two wordings exist:
   - `"Canceled by Ignored Build Step"` — a deployment that was created and then cancelled by the
@@ -244,6 +244,29 @@ things read as "not built":
   that makes the smoke check required.
 
 The preview URL to test against is the `target_url` of a project that **actually built**.
+
+#### An unposted product status is PENDING until it is explained
+
+Silence on a ready head means one of two opposite things for a product project
+(`.icm/project.json` → `deploy.projects[]`, class `product`): the native skip filtered it and it
+will never post, or Vercel has the build `QUEUED` / `BUILDING` and has not posted its status yet.
+A GREEN that reads the second as the first hands over a preview that has not built — or has
+failed — as green (sustentus PR 1162: `web` was `BUILDING` when the full gate "settled"). So
+`ci-status.sh` treats an unposted product project as **PENDING** and resolves it each pass:
+
+| What the script can see                                                      | Unposted product project is                             |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------- |
+| A Vercel deployment for the head exists (any state)                          | **waited on** — its status is coming                    |
+| Within the grace window (`PIPELINE_PREVIEW_GRACE`, default 180s from the head commit's time) | **waited on** — the queue may not have created it yet |
+| After the window, and Vercel lists **no deployment** for the head            | **settled** — the native skip, confirmed                |
+| After the window, no Vercel token, **another** product project posted       | **settled** — read as the native skip, marked UNVERIFIED |
+| After the window, no Vercel token, **no** product project posted            | **waited on** — nothing is known; `PENDING` at timeout  |
+
+The Vercel read is the token the deploy block names (`deploy.token_env`, else `VERCEL_TOKEN`),
+through `lib/vercel.sh`; a failed read is "unknown", never "no deployment". Every unposted project
+is named in the report — `[PENDING]` while waited on, `[INFO]` with the reason once settled — so
+an operator can see which rule settled it. A draft head is never asked: its previews are
+suppressed by design.
 
 ### Where a quiet project's verdict lands
 
@@ -276,19 +299,19 @@ be a note; they never make a verdict RED.
 
 The three values are the same in both phases; what differs is **which signals exist to settle
 them**, and `ci-status.sh` prints which tier its verdict settled on. Where the repo declares its
-deploy projects (`.icm/project.json` → deploy.projects), the script also names a product project
-that has posted nothing yet on a ready head as `[INFO] expected, not yet posted` — a notice, never
-a wait:
+deploy projects (`.icm/project.json` → deploy.projects), a product project that has posted nothing
+on a ready head is waited on until it is explained (above), and named in the report either way:
 
 | Phase                | GREEN means                                                                                                                                                                                                                                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Draft**            | **Nothing owed** (the cost floor): no quality job, the conditional jobs skipped by design, and **zero previews** — `ci-status.sh` settles at once on zero signals. The pre-flip check is the session's: `format.sh`, `lint.sh` and `security-check.sh` over the changed files. A draft GREEN authorises exactly one thing: Build flipping the PR ready. A repo that still runs a job on drafts says so, with what it costs, in `_shared/project-rules.md` → The factory. |
-| **Ready for review** | The **full gate** settled: the affected preview projects' statuses (the verdict), the advisory quality job reported beside them, the conditional jobs where the diff warrants them, and any check the repo still names in `required_checks`. This is the only GREEN the smoke, the Ready-to-merge tick, and the merge rest on.                                                                                                                                       |
+| **Ready for review** | The **full gate** settled: the affected preview projects' statuses (the verdict), every declared product project posted or explained as the native skip, the advisory quality job reported beside them, the conditional jobs where the diff warrants them, and any check the repo still names in `required_checks`. This is the only GREEN the smoke, the Ready-to-merge tick, and the merge rest on.                                                                                                                                       |
 
 Two consequences worth spelling out:
 
 - **The flip is what starts the full gate.** `ready_for_review` triggers the advisory job's run,
-  and Build's contract follows the flip with a push (empty commit if nothing is pending), so the
+  and Build's contract follows the flip with a push that always carries a diff (the `- ready:`
+  line in `notes.md` — an empty commit is skipped for every project and builds nothing), so the
   previews and the full verdict settle on a fresh head — never on a stale draft-era green.
 - **`converted_to_draft` downgrades the verdict with it.** A ready PR pulled back to draft
   cancels its in-flight advisory run (the concurrency group) and re-settles on nothing owed; any

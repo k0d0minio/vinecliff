@@ -27,8 +27,9 @@ order.
 2. `ci-status.sh <slug>` → `GREEN` on the **draft** head (the cheap tier, no previews — blind
    until ready is the operator's decision, not a defect).
 3. `git fetch origin main && git merge --no-edit origin/main`; a code change re-earns step 2.
-4. Flip ready (`update_pull_request`, `draft: false`), **then push** — an empty commit when
-   nothing is pending. Previews build per push: the post-flip push is what makes the full tier
+4. Flip ready (`update_pull_request`, `draft: false`), **then push a real change** — the
+   `- ready:` line in `notes.md`, never an empty commit (an empty diff is `Skipped - Not
+   affected` for every project). Previews build per push: the post-flip push is what makes the full tier
    and the product-app previews exist on a fresh head.
 5. `ci-status.sh <slug>` again → the **full gate**, with the preview URLs. RED is Build's to fix.
 

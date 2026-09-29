@@ -20,7 +20,13 @@
 # newest deployments are read and `meta.githubCommitSha` matched by prefix. A deployment the
 # project's Ignored Build Step canceled (a merge that touches none of the project's inputs) is
 # SKIPPED, not an incident: production still serves the previous READY deployment, named on the
-# line. CANCELED stays with ERROR only when it was not the ignore step — a person, or a newer push.
+# line. A deployment Vercel canceled because a newer `main` commit superseded it (two merges close
+# together — CANCELED, no errorCode, no errorMessage) is SUPERSEDED, not an incident: the newest
+# deployment of the same project (and target, or UAT environment) for a DESCENDANT of the merge
+# commit carries it, so the read settles on that one's state and names it on the line. Descendant
+# is asked of the repo's git (`merge-base --is-ancestor`); where git does not know a commit, a
+# later deployment from the same branch (`meta.githubCommitRef`) is taken instead. CANCELED stays
+# with ERROR only when neither applies — a person canceled it, or nothing newer carries it.
 #
 # Read-only in the strong sense: GET only, the CLI never run, nothing written but stdout.
 #
@@ -46,8 +52,11 @@
 #
 # Verdict (stdout, last line):
 #   RESULT: READY                 exit 0  — every declared project's deployment of this SHA is READY,
-#                                           or SKIPPED by its ignore step (at least one READY)
-#   RESULT: ERROR <project…>      exit 3  — at least one is ERROR or CANCELED (named). See the hotfix lane.
+#                                           SUPERSEDED by a READY descendant's, or SKIPPED by its
+#                                           ignore step (at least one READY)
+#   RESULT: ERROR <project…>      exit 3  — at least one is ERROR, CANCELED with nothing newer carrying
+#                                           it, or superseded by a descendant that failed (named).
+#                                           See the hotfix lane.
 #   RESULT: PENDING               exit 4  — the wait ran out with a deployment unsettled or not yet created
 #   RESULT: SKIP                  exit 0  — every project SKIPPED by its ignore step (production unchanged:
 #                                           `- production: SKIPPED on <sha> — …`), or no deploy block
@@ -120,8 +129,10 @@ fi
 # The deployment of $sha for <name>, newest first — under `--uat`, only the one whose custom
 # environment is uat.target (by slug, or by the environment's id). The sha filter first (full SHA
 # only); else the newest deployments, matched on meta.githubCommitSha.
-pick='sort_by(-.created) | first // empty'
-[ "$uat" -eq 0 ] || pick='[.[] | select(((.customEnvironment.slug // "") == $t) or ($id != "" and ((.customEnvironment.id // "") == $id)) or ((.target // "") == $t))] | sort_by(-.created) | first // empty'
+env_sel='true'
+[ "$uat" -eq 0 ] || env_sel='((.customEnvironment.slug // "") == $t) or ($id != "" and ((.customEnvironment.id // "") == $id)) or ((.target // "") == $t)'
+pick="[.[] | select($env_sel)] | sort_by(-.created) | first // empty"
+ignored_sel='(.state // .readyState) == "CANCELED" and ((.errorMessage // "") | test("Ignored Build Step"; "i"))'
 declare -A env_ids=()
 uat_env_id() { # <name> → the custom environment's id for uat.target, '' when unknown
   local resp
@@ -147,6 +158,33 @@ find_deployment() { # <name>
   printf '%s' "$deps" | jq -c --arg t "$ut" --arg id "$eid" "$pick"
 }
 
+# The deployment that superseded <deployment> — the newest one of the same project and target (or
+# UAT environment), created after it, for a later commit that carries the merge: a descendant by the
+# repo's git, or — where git does not know either commit — one built from the same branch. An
+# ignore-step cancel never counts: it built nothing. '' when nothing newer carries it.
+git_knows() { git -C "$repo_root" cat-file -e "${1}^{commit}" 2>/dev/null; }
+find_successor() { # <name> <deployment json>
+  local name="$1" dpl="$2" did c own ref deps cand csha tgt=() eid=""
+  did="$(printf '%s' "$dpl" | jq -r '.uid // .id')"
+  c="$(printf '%s' "$dpl" | jq -r '.created // 0')"
+  own="$(printf '%s' "$dpl" | jq -r --arg s "$sha" '.meta.githubCommitSha // $s')"
+  ref="$(printf '%s' "$dpl" | jq -r '.meta.githubCommitRef // empty')"
+  if [ "$uat" -eq 1 ]; then eid="$(uat_env_id "$name")"; else tgt=(--target production); fi
+  deps="$(vercel_deployments "$name" ${tgt[@]+"${tgt[@]}"} --limit 20 \
+    | jq -c --arg t "$ut" --arg id "$eid" --arg did "$did" --argjson c "$c" --arg own "$own" \
+        "[.[] | select(((.uid // .id) != \$did) and ((.created // 0) > \$c) and (((.meta.githubCommitSha // \"\") | . != \"\" and . != \$own)) and (($ignored_sel) | not) and ($env_sel))] | sort_by(-.created) | .[]")"
+  while IFS= read -r cand; do
+    [ -n "$cand" ] || continue
+    csha="$(printf '%s' "$cand" | jq -r '.meta.githubCommitSha')"
+    if git_knows "$own" && git_knows "$csha"; then
+      git -C "$repo_root" merge-base --is-ancestor "$own" "$csha" 2>/dev/null || continue
+    else
+      [ -n "$ref" ] && [ "$(printf '%s' "$cand" | jq -r '.meta.githubCommitRef // empty')" = "$ref" ] || continue
+    fi
+    printf '%s' "$cand"; return 0
+  done <<< "$deps"
+}
+
 # --- one read per project, bounded -----------------------------------------------------------------------
 
 deadline=$(( SECONDS + timeout ))
@@ -160,7 +198,7 @@ for pj in "${projects[@]}"; do
     lines+=("$name ($class): skipped — a quiet project carries no UAT environment")
     continue
   fi
-  state=""; dpl_id=""; dpl_url=""; created=""
+  state=""; dpl_id=""; dpl_url=""; created=""; by_state=""; by_id=""; by_url=""; by_sha=""
   while :; do
     # Under --uat: the custom environment's deployment of this SHA, built from main on the merge.
     dpl="$(find_deployment "$name")"
@@ -170,13 +208,29 @@ for pj in "${projects[@]}"; do
       dpl_url="$(printf '%s' "$dpl" | jq -r '.url // empty')"
       created="$(printf '%s' "$dpl" | jq -r '.created // 0')"
       # The ignore step's cancel carries Vercel's own words on the list item; nothing else does.
-      if [ "$state" = "CANCELED" ] && printf '%s' "$dpl" | jq -e '(.errorMessage // "") | test("Ignored Build Step"; "i")' >/dev/null; then
+      if [ "$state" = "CANCELED" ] && printf '%s' "$dpl" | jq -e "$ignored_sel" >/dev/null; then
         state="SKIPPED"
+      fi
+      # Superseded by a newer main commit: settle on the newest deployment that carries this one.
+      if [ "$state" = "CANCELED" ]; then
+        succ="$(find_successor "$name" "$dpl")"
+        if [ -n "$succ" ]; then
+          state="SUPERSEDED"
+          by_state="$(printf '%s' "$succ" | jq -r '.state // .readyState // "UNKNOWN"')"
+          by_id="$(printf '%s' "$succ" | jq -r '.uid // .id')"
+          by_url="$(printf '%s' "$succ" | jq -r '.url // empty')"
+          by_sha="$(printf '%s' "$succ" | jq -r '.meta.githubCommitSha // empty')"
+          case "$by_state" in READY|ERROR|CANCELED) break ;; esac
+        fi
       fi
       case "$state" in READY|ERROR|CANCELED|SKIPPED) break ;; esac
     fi
     if [ "$wait" -eq 0 ] || [ "$SECONDS" -ge "$deadline" ]; then break; fi
-    echo "$name: ${state:-no deployment of ${sha:0:7} yet} — waiting ${interval}s" >&2
+    if [ "$state" = "SUPERSEDED" ]; then
+      echo "$name: superseded by ${by_sha:0:7} (${by_id}), which is ${by_state} — waiting ${interval}s" >&2
+    else
+      echo "$name: ${state:-no deployment of ${sha:0:7} yet} — waiting ${interval}s" >&2
+    fi
     sleep "$interval"
   done
 
@@ -194,6 +248,13 @@ for pj in "${projects[@]}"; do
     SKIPPED)        if [ "$uat" -eq 1 ]; then lines+=("$name ($class): SKIPPED — ignore step, the UAT address keeps its last READY — canceled ${dpl_id}")
                     else lines+=("$name ($class): SKIPPED — ignore step, live ${prev_id:-its last READY} — canceled ${dpl_id}"); fi
                     ignored=1 ;;
+    SUPERSEDED)     case "$by_state" in
+                      READY)          lines+=("$name ($class): SUPERSEDED — by ${by_sha:0:7} READY https://${by_url} ${by_id} — canceled ${dpl_id}${prev_id:+ (prev ${prev_id})}"); ready=1 ;;
+                      ERROR|CANCELED) if [ "$uat" -eq 1 ]; then lines+=("$name ($class): SUPERSEDED — by ${by_sha:0:7} ${by_state} ${by_id} — canceled ${dpl_id} — the UAT address keeps its last READY deployment; fix it through a bug lane")
+                                      else lines+=("$name ($class): SUPERSEDED — by ${by_sha:0:7} ${by_state} ${by_id} — canceled ${dpl_id}${prev_id:+ (prev ${prev_id})} — see the hotfix lane (rollback.sh --sha $sha --vercel names the recovery)"); fi
+                                      errored="${errored:+$errored }$name"; verdict="ERROR" ;;
+                      *)              lines+=("$name ($class): SUPERSEDED — by ${by_sha:0:7} ${by_state} ${by_id} (unsettled) — canceled ${dpl_id}"); [ "$verdict" = "ERROR" ] || verdict="PENDING" ;;
+                    esac ;;
     ERROR|CANCELED) if [ "$uat" -eq 1 ]; then lines+=("$name ($class): $state — ${dpl_id} — the UAT address keeps its last READY deployment; fix it through a bug lane")
                     else lines+=("$name ($class): $state — ${dpl_id}${prev_id:+ (prev ${prev_id})} — see the hotfix lane (rollback.sh --sha $sha --vercel names the recovery)"); fi
                     errored="${errored:+$errored }$name"; verdict="ERROR" ;;

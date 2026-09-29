@@ -16,6 +16,13 @@
 #   * Check runs whose name ends in "(advisory)" are reported but can never make the verdict RED.
 #   * A required check that has not appeared yet is PENDING, never GREEN — an empty check list on a
 #     fresh push is CI not having started, not CI having passed.
+#   * On a READY head, a declared product deploy project (.icm/project.json → deploy.projects,
+#     class product) that has posted no status is UNPOSTED, and unposted is PENDING until the
+#     script can tell a build that has not posted yet from the native unaffected-skip that will
+#     never post: a Vercel deployment for the head (QUEUED, BUILDING, anything) is waited on; no
+#     deployment once the grace window has passed is the native skip and settles. Without a Vercel
+#     token, the grace window alone decides — and only when another product project HAS posted on
+#     the head; with none posted at all, nothing is known and the run stays PENDING.
 #
 # Config is read straight from the process environment — this script does NOT load any .env file.
 # The reads go through .icm/scripts/lib/gh.sh (curl with the token, else a logged-in `gh` CLI,
@@ -39,6 +46,14 @@
 #                                     derived per pass from the signals themselves (see the
 #                                     loop below), because a draft head and a skipped preview
 #                                     are never owed one.
+#   PIPELINE_PREVIEW_GRACE (optional) Seconds after the head commit's committer time within which
+#                                     an unposted product project is always waited on — Vercel's
+#                                     queue can hold a build a while before its status posts.
+#                                     Default 180. The committer time stands in for the push time
+#                                     (Build's post-flip push is a fresh commit, so the two agree).
+#   <deploy.token_env> / VERCEL_TOKEN (optional) Read through .icm/scripts/lib/vercel.sh to ask the
+#                                     platform whether an unposted product project has a deployment
+#                                     for the head. Absent, the grace rule above decides alone.
 #
 # Usage:
 #   .icm/scripts/ci-status.sh <slug> [--timeout <seconds>] [--interval <seconds>] [--no-wait]
@@ -98,12 +113,23 @@ smoke_name="$(project_field '.smoke_check.name' '')"
 smoke_workflow="$(project_field '.smoke_check.workflow' '')"
 smoke_status="$(project_field '.smoke_check.preview_status' '')"
 
-# The repo's product deploy projects, by the commit-status context each posts under
-# (.icm/project.json → deploy.projects[].status_context, class product). Read for ONE notice:
-# a product project with no status at all on a ready head is reported as "expected, not yet
-# posted" — so an operator can tell a preview that has not started from one the deploy skipped.
-# The verdict arithmetic is unchanged: an absent status is never waited on (`_shared/ci.md`).
-product_contexts="$([ -f "$project_json" ] && jq -r '(.deploy.projects // [])[] | select((.class // "product") == "product") | .status_context // empty' "$project_json" 2>/dev/null || true)"
+# The repo's product deploy projects, one "<status_context>\t<vercel project name>" line each
+# (.icm/project.json → deploy.projects[], class product). On a READY head a product project with
+# no status is UNPOSTED — a build that has not posted yet, or the native unaffected-skip that never
+# will — and the settle loop resolves which before it may settle GREEN (`_shared/ci.md` → "An
+# unposted product status is PENDING until it is explained").
+product_projects="$([ -f "$project_json" ] && jq -r '(.deploy.projects // [])[] | select((.class // "product") == "product") | select(.status_context // "" | length > 0) | [.status_context, (.name // "")] | @tsv' "$project_json" 2>/dev/null || true)"
+
+preview_grace="${PIPELINE_PREVIEW_GRACE:-180}"
+case "$preview_grace" in ''|*[!0-9]*) die "PIPELINE_PREVIEW_GRACE must be a whole number of seconds" ;; esac
+
+# The Vercel transport, for the one question the statuses cannot answer: does an unposted product
+# project have a deployment for the head? Nothing is fetched at source time; no token → the grace
+# rule decides alone.
+if [ -n "$product_projects" ]; then
+  # shellcheck source=lib/vercel.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/lib/vercel.sh"
+fi
 
 # A blocking GitHub GET. Echoes "<body>\n<http_code>"; the caller splits the status off the last line.
 gh_get() { gh_api GET "$1"; }
@@ -280,11 +306,85 @@ read_signals() {
   '
 }
 
+# --- the unposted product projects -------------------------------------------------------------------
+# A declared product project with no status on a READY head is not "absent" by default — Vercel can
+# hold a build QUEUED or BUILDING before its status posts (sustentus PR 1162: GREEN "settled on the
+# full gate" while `web` was BUILDING). Each pass resolves every unposted one to exactly one of:
+#   wait     — a deployment exists for the head, or the grace window is still open, or nothing can
+#              explain the silence. Keeps the run PENDING, exactly like a pending status.
+#   settled  — no deployment for the head once the grace window has passed (the native
+#              unaffected-skip, confirmed by the platform), or — with no token to ask — the grace
+#              window has passed and another product project HAS posted on this head.
+# Sets unposted_wait (context names, comma-joined) and unposted_notes (one report line each).
+
+head_epoch_sha=""; head_epoch=""
+head_commit_epoch() { # sets head_epoch: the head commit's committer time in epoch seconds — one read per head
+  [ "$head_epoch_sha" != "$head_sha" ] || return 0
+  # Called directly, never in $(…), so the cache survives the pass. An unreadable answer leaves
+  # head_epoch empty — an unanswered question, which the caller reads as the window still open.
+  head_epoch="$(api "/repos/${repo}/commits/${head_sha}" "commit ${head_sha:0:7}" 2>/dev/null \
+    | jq -r '(.commit.committer.date // .commit.author.date // empty) | sub("\\.[0-9]+"; "") | fromdateiso8601? // empty' 2>/dev/null)" \
+    || head_epoch=""
+  head_epoch_sha="$head_sha"
+}
+
+resolve_unposted() {
+  unposted_wait=""; unposted_notes=""
+  [ -n "$product_projects" ] && [ "$pr_draft" != "true" ] || return 0
+
+  local ctx name unposted="" any_posted=0 now epoch grace_left deps state count note token_note
+  # Names the token, never prints it.
+  if [ -n "${vercel_token:-}" ]; then token_note="the ${vercel_token_name} read failed"; else token_note="${vercel_token_name:-VERCEL_TOKEN} not set"; fi
+  while IFS=$'\t' read -r ctx name; do
+    [ -n "$ctx" ] || continue
+    if printf '%s\n' "$signals" | awk -F'\t' -v c="$ctx" '$3==c' | grep -q .; then
+      any_posted=1
+    else
+      unposted="${unposted}${ctx}"$'\t'"${name}"$'\n'
+    fi
+  done <<< "$product_projects"
+  [ -n "$unposted" ] || return 0
+
+  now="$(date +%s)"
+  head_commit_epoch; epoch="$head_epoch"
+  # An unreadable commit time is an unanswered question: the window is treated as still open.
+  if [ -n "$epoch" ]; then grace_left=$(( epoch + preview_grace - now )); else grace_left="$preview_grace"; fi
+
+  while IFS=$'\t' read -r ctx name; do
+    [ -n "$ctx" ] || continue
+    state=""; count=""
+    if [ -n "${vercel_token:-}" ] && [ -n "$name" ]; then
+      # A failed read is "unknown", never "no deployment" — it falls through to the grace rule.
+      if deps="$( (vercel_deployments "$name" --sha "$head_sha" --limit 5) 2>/dev/null )"; then
+        count="$(printf '%s' "$deps" | jq 'length' 2>/dev/null || echo "")"
+        state="$(printf '%s' "$deps" | jq -r 'sort_by(-(.created // 0)) | first | (.state // .readyState // empty)' 2>/dev/null || true)"
+      fi
+    fi
+
+    if [ -n "$count" ] && [ "$count" -gt 0 ]; then
+      note="[PENDING] $ctx: Vercel has a ${state:-?} deployment for ${head_sha:0:7}, status not yet posted — waited on"
+      unposted_wait="${unposted_wait:+$unposted_wait, }$ctx"
+    elif [ "$grace_left" -gt 0 ]; then
+      note="[PENDING] $ctx: no status on ${head_sha:0:7} yet — within the ${preview_grace}s grace window (${grace_left}s left), waited on"
+      unposted_wait="${unposted_wait:+$unposted_wait, }$ctx"
+    elif [ "$count" = "0" ]; then
+      note="[INFO] $ctx: no status and no Vercel deployment for ${head_sha:0:7} after the ${preview_grace}s grace window — the native unaffected-skip; nothing built, nothing to smoke"
+    elif [ "$any_posted" -eq 1 ]; then
+      note="[INFO] $ctx: no status on ${head_sha:0:7} after the ${preview_grace}s grace window while another product project posted — read as the native unaffected-skip, UNVERIFIED (${token_note}; the platform did not confirm it)"
+    else
+      note="[PENDING] $ctx: no status on ${head_sha:0:7} and no product project has posted — cannot tell a build that has not posted from the native skip; set ${vercel_token_name:-VERCEL_TOKEN} so the platform can answer"
+      unposted_wait="${unposted_wait:+$unposted_wait, }$ctx"
+    fi
+    unposted_notes="${unposted_notes}${note}"$'\n'
+  done <<< "$unposted"
+}
+
 # --- wait for the run to settle ----------------------------------------------------------------------
 # deadline was set above, before the expected-head wait — the two share one timeout budget.
 
 verdict=""
 signals=""
+unposted_wait=""; unposted_notes=""
 
 while :; do
   # Re-read the head each pass: a push landing mid-wait moves the SHA, and a verdict about the
@@ -323,6 +423,10 @@ while :; do
   blocking_fail="$(printf '%s\n' "$signals" | awk -F'\t' '$1=="blocking" && $2=="fail"'   || true)"
   blocking_wait="$(printf '%s\n' "$signals" | awk -F'\t' '$1=="blocking" && $2=="pending"' || true)"
 
+  # A declared product project with no status on a ready head keeps the run PENDING until it is
+  # explained — a deployment still building, or the native skip confirmed (resolve_unposted above).
+  resolve_unposted
+
   # A required check that has not registered yet keeps the run PENDING — an empty list is CI not
   # having started, never CI having passed.
   missing_required=""
@@ -336,7 +440,7 @@ while :; do
 
   if [ -n "$blocking_fail" ]; then
     verdict="RED"; break                       # a failure is final — later checks cannot un-fail it
-  elif [ -z "$blocking_wait" ] && [ -z "$missing_required" ]; then
+  elif [ -z "$blocking_wait" ] && [ -z "$missing_required" ] && [ -z "$unposted_wait" ]; then
     verdict="GREEN"; break
   fi
 
@@ -345,7 +449,7 @@ while :; do
   fi
 
   waiting_on="$(printf '%s\n' "$blocking_wait" | awk -F'\t' 'NF{print $3}' | paste -sd', ' - || true)"
-  echo "waiting ${interval}s — unsettled: ${waiting_on:-none}${missing_required:+; not yet registered: $missing_required}" >&2
+  echo "waiting ${interval}s — unsettled: ${waiting_on:-none}${missing_required:+; not yet registered: $missing_required}${unposted_wait:+; product previews not yet posted: $unposted_wait}" >&2
   sleep "$interval"
 done
 
@@ -376,14 +480,10 @@ emit "Vercel projects skipped for this diff (no preview — not a pass; reason s
 
 if [ "$pr_draft" = "true" ]; then
   echo "Previews: suppressed — draft. Product apps preview from the ready flip; quiet apps build on merge." >&2
-elif [ -n "$product_contexts" ]; then
-  # A declared product project that posted nothing on a READY head: not skipped (that would be a
-  # status with a skip description), not failed — simply not there yet, or filtered platform-side.
-  while IFS= read -r ctx; do
-    [ -n "$ctx" ] || continue
-    printf '%s\n' "$signals" | awk -F'\t' -v c="$ctx" '$3==c' | grep -q . \
-      || echo "[INFO] $ctx: expected (deploy.projects, class product), not yet posted on ${head_sha:0:7} — not waited on; a preview that never appears is the native unaffected-skip or a build that has not started" >&2
-  done <<< "$product_contexts"
+elif [ -n "$unposted_notes" ]; then
+  # Each declared product project that posted nothing on this READY head, and what the last pass
+  # concluded about it: still waited on ([PENDING]) or explained as the native skip ([INFO]).
+  printf '%s' "$unposted_notes" >&2
 fi
 
 case "$verdict" in
@@ -396,9 +496,9 @@ case "$verdict" in
     echo "RESULT: RED"; exit 3 ;;
   *)
     if [ "$wait" -eq 0 ]; then
-      echo "run is unsettled${missing_required:+ (never registered: $missing_required)} and --no-wait was passed — this is NOT a pass" >&2
+      echo "run is unsettled${missing_required:+ (never registered: $missing_required)}${unposted_wait:+ (product previews not yet posted: $unposted_wait)} and --no-wait was passed — this is NOT a pass" >&2
     else
-      echo "still unsettled after ${timeout}s${missing_required:+ (never registered: $missing_required)} — this is NOT a pass" >&2
+      echo "still unsettled after ${timeout}s${missing_required:+ (never registered: $missing_required)}${unposted_wait:+ (product previews not yet posted: $unposted_wait)} — this is NOT a pass" >&2
     fi
     echo "RESULT: PENDING"; exit 4 ;;
 esac

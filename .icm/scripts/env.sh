@@ -116,7 +116,9 @@ fi
 # Tidy "./.env.example" → ".env.example"
 for i in "${!MANIFESTS[@]}"; do MANIFESTS[$i]="${MANIFESTS[$i]//|.\/.env.example/|.env.example}"; MANIFESTS[$i]="${MANIFESTS[$i]//|.\/|.env.example/|.|.env.example}"; done
 
-# parse_example <file> → key \t targets(csv, may include ci/cloud) \t note(flattened, suffix stripped)
+# parse_example <file> → key \x1f targets(csv, may include ci/cloud) \x1f note(flattened, suffix stripped)
+# Fields split on \x1f (not tab): tab is an IFS whitespace character, so `IFS=$'\t' read` collapses
+# the two delimiters around an empty targets field and swallows a note that has no [targets] suffix.
 parse_example() {
   [ -f "$1" ] || return 0
   awk '
@@ -125,7 +127,7 @@ parse_example() {
     /^[A-Za-z_][A-Za-z0-9_]*=/ {
       key=$0; sub(/=.*/, "", key); t=""; n=note
       if (match(n, /\[[a-z, ]+\][ \t]*$/)) { t=substr(n, RSTART+1, RLENGTH-2); gsub(/[] \t]/, "", t); n=substr(n, 1, RSTART-1); sub(/[ \t]+$/, "", n) }
-      print key "\t" t "\t" n; note=""; next }
+      print key "\037" t "\037" n; note=""; next }
     { note="" }' "$1"
 }
 # vercel_targets_of <targets-csv> → the Vercel targets a key is scoped to (csv), "" when ci/cloud/optional only
@@ -226,7 +228,7 @@ cmd_audit() {
     [ -f "$file" ] || { warn "$file does not exist — nothing declared for $name (env.sh init seeds it)"; continue; }
     git check-ignore -q "$file" 2>/dev/null && warn "$file is gitignored — a manifest git cannot see is not a manifest (add !.env.example under the .env* rule)"
     local rows; rows="$(parse_example "$file")"
-    all_declared="$all_declared"$'\n'"$(printf '%s\n' "$rows" | cut -f1)"
+    all_declared="$all_declared"$'\n'"$(printf '%s\n' "$rows" | cut -d $'\x1f' -f1)"
     local vercel_rows="" vercel_ok=0
     if [ "$name" != "(root)" ]; then
       if [ -n "$vercel_token" ]; then
@@ -236,7 +238,7 @@ cmd_audit() {
         warn "Vercel not read: ${vercel_token_name} unset in this environment"
       fi
     fi
-    while IFS=$'\t' read -r key targets note; do
+    while IFS=$'\x1f' read -r key targets note; do
       [ -n "$key" ] || continue
       in_scope "$key" || continue
       local vt; vt="$(vercel_targets_of "$targets")"
@@ -264,7 +266,7 @@ cmd_audit() {
     if [ "$vercel_ok" -eq 1 ]; then
       while IFS=$'\t' read -r vkey vkind vtargets; do
         [ -n "$vkey" ] || continue
-        printf '%s\n' "$rows" | cut -f1 | grep -qx "$vkey" && continue
+        printf '%s\n' "$rows" | cut -d $'\x1f' -f1 | grep -qx "$vkey" && continue
         in_scope "$vkey" || continue
         gap "$vkey: on Vercel/$name [$vtargets]$( [ "$vkind" = sensitive ] && echo ', sensitive') but undeclared in $file (env.sh init)"
       done <<<"$vercel_rows"
@@ -381,7 +383,7 @@ cmd_pull() {
       echo
       while IFS= read -r line; do
         case "$line" in
-          [A-Za-z_]*=*) k="${line%%=*}"; n="$(printf '%s\n' "$rows" | awk -F'\t' -v k="$k" '$1==k {print $3 ($2==""?"":"  ["$2"]"); exit}')"; [ -z "$n" ] || echo "# $n"; printf '%s\n' "$line"; echo ;;
+          [A-Za-z_]*=*) k="${line%%=*}"; n="$(printf '%s\n' "$rows" | awk -F$'\x1f' -v k="$k" '$1==k {print $3 ($2==""?"":"  ["$2"]"); exit}')"; [ -z "$n" ] || echo "# $n"; printf '%s\n' "$line"; echo ;;
           "#"*) : ;;   # the CLI's own banner is replaced by ours
           *) printf '%s\n' "$line" ;;
         esac
@@ -389,7 +391,7 @@ cmd_pull() {
       while IFS=$'\t' read -r vkey vkind _; do
         [ "$vkind" = "sensitive" ] || continue
         grep -qE "^${vkey}=" "$envlocal" && continue
-        n="$(printf '%s\n' "$rows" | awk -F'\t' -v k="$vkey" '$1==k {print $3; exit}')"; [ -z "$n" ] || echo "# $n"
+        n="$(printf '%s\n' "$rows" | awk -F$'\x1f' -v k="$vkey" '$1==k {print $3; exit}')"; [ -z "$n" ] || echo "# $n"
         echo "# sensitive — paste locally"; echo "${vkey}="; echo
       done <<<"$kinds"
     } > "$tmp"
@@ -412,7 +414,7 @@ cmd_push_notes() {
     local id; id="$(vercel_project_id "$name")"; [ -n "$id" ] || continue
     local envs; envs="$(vercel_get_all "/v9/projects/${id}/env" envs "" '{id, key, comment: (.comment // "")}' 2>/dev/null)" || { echo "  [WARN] $name: could not list env"; continue; }
     envs="$(printf '%s' "$envs" | jq -c '.[]')"
-    while IFS=$'\t' read -r key targets note; do
+    while IFS=$'\x1f' read -r key targets note; do
       [ -n "$key" ] && [ -n "$note" ] && [ "$note" != "TODO: note" ] || continue
       if [ "${#note}" -gt 500 ]; then echo "  [WARN] $key: note is ${#note} characters (Vercel caps at 500) — shorten it in $file; not pushed"; over=$((over+1)); continue; fi
       while IFS= read -r e; do

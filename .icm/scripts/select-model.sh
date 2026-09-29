@@ -53,7 +53,8 @@
 #
 # Usage:
 #   .icm/scripts/select-model.sh <epic>/<feature-slug> [--stage <stage>]   # .icm/intake/<epic>/<feature-slug>.md
-#   .icm/scripts/select-model.sh <stub-name>           [--stage <stage>]   # found anywhere under .icm/intake/ (live)
+#   .icm/scripts/select-model.sh <run-slug>            [--stage <stage>]   # a live run's spec, else the stub run.md names
+#   .icm/scripts/select-model.sh <stub-name>           [--stage <stage>]   # under .icm/intake/ — live, else a scope's _done/
 #   .icm/scripts/select-model.sh <path-to-file>        [--stage <stage>]   # any stub, scope.md or spec.md
 #   .icm/scripts/select-model.sh --complexity <word>   [--stage <stage>]   # no file — the words alone
 #   .icm/scripts/select-model.sh --stage <stage>                           # complexity defaults to medium
@@ -82,31 +83,65 @@ while [ $# -gt 0 ]; do
     --stage=*)      stage_arg="${1#--stage=}"; shift ;;
     --complexity)   complexity_arg="${2:-}"; [ -n "$complexity_arg" ] || die "--complexity needs a value"; shift 2 ;;
     --complexity=*) complexity_arg="${1#--complexity=}"; shift ;;
-    -h|--help)      sed -n '2,66p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)      sed -n '2,67p' "${BASH_SOURCE[0]}"; exit 0 ;;
     --*)            die "unknown flag: $1" ;;
     *)              [ -z "$arg" ] && arg="$1" || die "unexpected argument: $1"; shift ;;
   esac
 done
 [ -n "$arg" ] || [ -n "$stage_arg" ] || [ -n "$complexity_arg" ] \
-  || die "usage: select-model.sh <epic>/<feature-slug> | <stub-name> | <path> [--stage <stage>] [--complexity <word>] [--json]"
+  || die "usage: select-model.sh <run-slug> | <epic>/<feature-slug> | <stub-name> | <path> [--stage <stage>] [--complexity <word>] [--json]"
 [ -z "$arg" ] || [ -z "$complexity_arg" ] || die "give a file OR --complexity, not both"
 
+# The project's manifest reader: the intake archive below, and the model id at the end.
+intake_archive_rel=".icm/intake/_done"
+if command -v jq >/dev/null 2>&1; then
+  # shellcheck source=lib/project.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/lib/project.sh"
+fi
+
 # --- resolve the file, when one was named ---------------------------------------------------------
+# A bare name is a run slug or a stub name, tried in this order — the first that exists is read:
+#   1. .icm/runs/<name>/02_define/output/spec.md    a live spine run's spec (what Build is executing)
+#   2. .icm/runs/<name>/run.md → `- stub:`          the stub a live run was spun from (a lane's triage
+#                                                   stub, or a spine run before its spec) — live, or in
+#                                                   its scope's _done/, where new-run.sh --stub moved it
+#   3. .icm/intake/**/<name>.md, not in _done/      a live stub (epics and triage)
+#   4. .icm/intake/**/_done/<name>.md               a spun-out stub whose run is still in flight
+# Never the archives: an archived run (runs/_done/) or an archived epic (the intake archive) is
+# shipped work nobody is about to open a session for.
 file=""
 if [ -n "$arg" ]; then
+  name="${arg%.md}"
+  run_dir=".icm/runs/$name"
   if [ -f "$arg" ]; then
     file="$arg"
-  elif [ -f ".icm/intake/${arg%.md}.md" ]; then
-    file=".icm/intake/${arg%.md}.md"
+  elif [ -f ".icm/intake/$name.md" ]; then
+    file=".icm/intake/$name.md"
+  elif [ "${name#*/}" = "$name" ] && [ -f "$run_dir/02_define/output/spec.md" ]; then
+    file="$run_dir/02_define/output/spec.md"
   else
-    # A bare stub name: look through the live intake folders (epics and triage), never the archives —
-    # a consumed stub is not work anybody is about to open a session for.
-    mapfile -t hits < <(find .icm/intake -name "${arg%.md}.md" -not -path '*/_done/*' 2>/dev/null | sort)
-    case "${#hits[@]}" in
-      0) die "no stub '$arg' under .icm/intake/ (give <epic>/<feature-slug>, a stub name, or a path)" ;;
-      1) file="${hits[0]}" ;;
-      *) printf '  %s\n' "${hits[@]}" >&2; die "stub name '$arg' is ambiguous — give <epic>/<feature-slug>" ;;
-    esac
+    if [ "${name#*/}" = "$name" ] && [ -f "$run_dir/run.md" ]; then
+      stub_line="$(sed -n 's/^- stub:[[:space:]]*//p' "$run_dir/run.md" | head -n1 | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//; s#^\./##; s#^\.icm/##')"
+      if [ -n "$stub_line" ]; then
+        if [ -f ".icm/$stub_line" ]; then
+          file=".icm/$stub_line"
+        elif [ -f ".icm/$(dirname "$stub_line")/_done/$(basename "$stub_line")" ]; then
+          file=".icm/$(dirname "$stub_line")/_done/$(basename "$stub_line")"
+        fi
+      fi
+    fi
+    if [ -z "$file" ]; then
+      mapfile -t hits < <(find .icm/intake -name "$name.md" -not -path '*/_done/*' 2>/dev/null | sort)
+      if [ "${#hits[@]}" -eq 0 ]; then
+        mapfile -t hits < <(find .icm/intake -path '*/_done/*' -name "$name.md" \
+                              -not -path "${intake_archive_rel#./}/*" 2>/dev/null | sort)
+      fi
+      case "${#hits[@]}" in
+        0) die "no run '$name' in .icm/runs/ and no stub '$arg' under .icm/intake/ (give a run slug, <epic>/<feature-slug>, a stub name, or a path)" ;;
+        1) file="${hits[0]}" ;;
+        *) printf '  %s\n' "${hits[@]}" >&2; die "stub name '$arg' is ambiguous — give <epic>/<feature-slug>" ;;
+      esac
+    fi
   fi
   file="${file#./}"
 fi
@@ -202,8 +237,6 @@ flags="--model $model"
 # --- the project's own id for that alias, when it keeps one ----------------------------------------
 model_id=""
 if command -v jq >/dev/null 2>&1; then
-  # shellcheck source=lib/project.sh
-  source "$(dirname "${BASH_SOURCE[0]}")/lib/project.sh"
   model_id="$(project_field ".models.${model}" '')"
 fi
 

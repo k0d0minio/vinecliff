@@ -180,12 +180,19 @@ everything except the source files you actually edit. Record overruns on a one-l
     Release's step 7(a) stays as the final merge and is usually a no-op after this. A merge
     that changed code takes step 9's scripts again before flipping.
 
-11. **Flip ready, then push.** `update_pull_request`, `draft: false` (per `_shared/github.md`),
-    **then push** — an empty commit (`git commit --allow-empty -m "chore: <slug> — ready"`) when
-    nothing is pending. The flip itself produces no push, and previews build per push: the
-    post-flip push is what makes the full-tier run and the affected product-app previews
-    materialise on a fresh head, so the full verdict can never rest on a stale draft-era green.
-    Open means "reviewable"; it is not the merge authorisation.
+11. **Flip ready, then push a real change.** `update_pull_request`, `draft: false` (per
+    `_shared/github.md`), **then** write the `- ready:` line into `03_build/output/notes.md`
+    (`<ISO-8601Z> — flipped on <head SHA before the flip>`, Outputs below), commit it with
+    whatever else is pending as `chore: <slug> — ready`, and push. The flip itself produces no
+    push, and previews build per push: the post-flip push is what makes the full-tier run and the
+    affected product-app previews materialise on a fresh head, so the full verdict can never rest
+    on a stale draft-era green. **Never an empty commit** — an empty diff makes Vercel's native
+    unaffected-project skip drop every project before the ignore step runs, so the ready head has
+    no preview at all; the `notes.md` line is what guarantees a diff. A ready head on which every
+    product project reads `Skipped - Not affected` has no preview behind it: it is **not a pass**
+    and hosts no smoke (`_shared/ci.md` → the skip wordings) — when the branch changes a product
+    app, that is a STOP with the statuses quoted, never a GREEN handed over. Open means
+    "reviewable"; it is not the merge authorisation.
 12. **Settle the full verdict on the post-flip head** — the same `ci-status.sh <slug>` call, which
     now reports the **full gate**: the affected product-app previews with their URLs (the
     verdict) and the advisory quality job's report beside them (`_shared/project-rules.md` → The
@@ -235,6 +242,7 @@ lists, intermediate results — lands under `.icm/runs/<slug>/03_build/`, on the
 
 - commits: <short list>
 - ci: <GREEN on <sha> | RED on <check> — why it is not mine to fix>
+- ready: <ISO-8601Z> — flipped on <sha> (written after the flip, step 11 — the ready push's diff)
 
 ## What changed
 

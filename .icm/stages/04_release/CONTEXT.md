@@ -265,7 +265,9 @@ overruns on a one-line `Context budget:` note in the `## Release` record.
    `ERROR <project> — see the hotfix lane`, or `PENDING` after the bound, or `SKIPPED` when
    every project's ignore step canceled its build (a merge touching no app — production
    unchanged, the live deployment named; one skipped project beside READY ones stays `READY`),
-   or `not declared (no deploy block)`. An `ERROR` un-merges nothing and starts nothing: it is a
+   or `not declared (no deploy block)`. A build Vercel canceled because a later merge superseded
+   it reads `SUPERSEDED — by <sha> READY …` and counts as READY: the newest deployment of a
+   descendant commit carries the merge, and its state is the verdict — not a hotfix. An `ERROR` un-merges nothing and starts nothing: it is a
    line in the record and the operator's call to open `/pipeline hotfix`. **On a UAT repo** the
    merge deployed to the UAT environment, so read that instead — `.icm/scripts/deploy-status.sh
    --sha <merge-sha> --uat` — which prints `- uat: READY on <sha> — web dpl_… · <the fixed UAT

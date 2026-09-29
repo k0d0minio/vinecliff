@@ -104,6 +104,7 @@ fields map mechanically onto Define's `spec.md`.
 - depends-on: <other feature-slugs, or none>
 - sequence: <n of m> # what `/pipeline new` reads to find "next"
 - complexity: <low | medium | high | research> # optional — carried from scope.md, sharpened per stub
+- priority: <P0 | P1 | P2> # optional — /day and the estate board rank across repos on it
 - recommended-model: <sonnet | opus | fable> # optional — what `select-model.sh` prints, or the operator's override
 
 ## Problem
@@ -174,6 +175,7 @@ conversation. Writing the stub costs a minute; that is the whole point.
 - lane: bug | tweak | chore
 - found-by: <run slug / review / audit / conversation> · <YYYY-MM-DD>
 - complexity: <low | medium | high | research> # optional — read by `select-model.sh`
+- priority: <P0 | P1 | P2> # optional — /day and the estate board rank across repos on it
 
 ## Problem
 
@@ -249,7 +251,12 @@ PR; `batch` writes an intake epic, the others only read.
 `<scope-slug>/` — breakdown, `_done/` stubs and `_source/` intact. `.icm/intake/` therefore holds
 only epics with work left in them.
 
-**`_done/` alone is not the signal: it means spun out, not shipped** — the two ends of a stub's
+****The front run archives with its scope** — `runs/<scope-slug>/` (Scope, no PR of its own) lives
+until the last stub of the scope has finished, regardless of UAT or promotion, and `close-out.sh`
+moves it with the scope (Jamie, 2026-09-26); a front still live after its scope archived is the
+missed close-out the hygiene report names.
+
+`_done/` alone is not the signal: it means spun out, not shipped** — the two ends of a stub's
 life sit in different stages. Define moves it into `_done/` when the run opens (`new-run.sh
 --stub`); the epic is archived by `.icm/scripts/close-out.sh`, run on the branch by the Release
 that merges the batch's final run, which is why the script re-checks each sibling's PR rather than

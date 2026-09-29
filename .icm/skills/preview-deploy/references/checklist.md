@@ -7,7 +7,7 @@
 - [ ] `origin/main` merged in; no conflict inside `.icm/runs/<slug>/` (one there is a STOP)
 - [ ] `check-migrations.sh` → `OK` or `SKIP` (only when the branch carries a migration)
 - [ ] `security-check.sh <slug> --branch` → `OK`
-- [ ] PR flipped to open, **then** a push (empty commit if nothing pending)
+- [ ] PR flipped to open, **then** a push carrying the `- ready:` line in `notes.md` (never an empty commit)
 - [ ] `ci-status.sh <slug>` → `RESULT: GREEN` on the post-flip head (full tier), preview URLs listed
 - [ ] `notes.md` names the preview URLs; `status.md` says `ci: GREEN`; `handoff.md` says "smoke, tick Ready to merge, then release"
 

@@ -39,8 +39,12 @@
 #      is already there), staged into the same commit — then
 #      moves .icm/runs/<slug>/ -> <runs_archive>/<slug>/ — the whole folder, so `usage.md` (the
 #      per-stage usage lines usage-snapshot.sh appended) travels with the run into the archive,
-#      where run-economics.sh (icm-board) reads it. A hotfix or handover lane run archives the
-#      same way as any lane (lib/project.sh → pipeline_lanes).
+#      where run-economics.sh (icm-board) reads it. The move carries the WORKING TREE, not the
+#      index: the run folder is staged (`git add -A`) first, so the `usage-snapshot.sh <slug>
+#      <stage> end` line each lane appends just before calling this — and anything else written
+#      there since the last commit — rides the archive instead of being left behind as a dirty
+#      tree and a follow-up commit. A hotfix or handover lane run archives the same way as any
+#      lane (lib/project.sh → pipeline_lanes).
 #   4. If the run came from an intake stub, and that epic now has no active stubs left AND every
 #      one of its OTHER spun-out stubs is settled — its run's PR merged, or the stub itself retired
 #      with a `> Dropped:` / `superseded-by:` line — moves .icm/intake/<epic>/ ->
@@ -216,6 +220,9 @@ if [ -d ".icm/runs/$slug" ]; then
   if [ "$dry_run" = "1" ]; then
     echo "[dry-run] would move .icm/runs/$slug/ → $runs_archive/$slug/" >&2
   else
+    # `git mv` moves the index copy of each file — stage what is on disk first, or the end line
+    # usage-snapshot.sh has just appended stays behind, unstaged, in the archived usage.md.
+    git add -A -- ".icm/runs/$slug"
     git mv ".icm/runs/$slug" "$runs_archive/$slug" \
       || die "could not archive the run folder"
     echo "archived run: .icm/runs/$slug/ → $runs_archive/$slug/" >&2
@@ -295,6 +302,7 @@ if [ -n "$epic" ]; then
         if [ "$dry_run" = "1" ]; then
           echo "[dry-run] would move the front .icm/runs/$epic/ → $runs_archive/$epic/" >&2
         else
+          git add -A -- ".icm/runs/$epic"
           git mv ".icm/runs/$epic" "$runs_archive/$epic" \
             || die "could not archive the front run behind the epic"
           echo "archived front run: .icm/runs/$epic/ → $runs_archive/$epic/" >&2

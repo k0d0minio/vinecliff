@@ -46,6 +46,8 @@ T _shared/conventions.md
 T _shared/template-change.md
 T _shared/promotion.md
 T _shared/output.md
+T _shared/lenses.md
+T _shared/register.md
 T _shared/run-pack/project.md
 T _shared/run-pack/plan.md
 T _shared/run-pack/tasks.md
@@ -104,6 +106,7 @@ T raw/_processed/.gitkeep
 T processed/.gitkeep
 T output/.gitkeep
 P project.json
+P project.md
 P _shared/project-rules.md
 P _shared/knowledge-map.md
 P scripts/format.sh

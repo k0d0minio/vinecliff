@@ -295,8 +295,9 @@ never a second PR.
    the cost floor); `format.sh` / `lint.sh` / `security-check.sh` are the pre-flip check.
 3. `ci-status.sh <slug>` → `GREEN` (nothing owed, nothing red) before flipping. A script's
    `PROBLEMS` or `BLOCKED` is Build's to fix, not Release's.
-4. Hand-off: `update_pull_request` with `draft: false`, **then push** — an empty commit when
-   nothing is pending. The flip starts the full gate; the push makes the advisory quality job
+4. Hand-off: `update_pull_request` with `draft: false`, **then push a real change** — the
+   `- ready:` line in `notes.md`, never an empty commit (Vercel skips an empty diff for every
+   project, so no preview builds). The flip starts the full gate; the push makes the advisory quality job
    and the affected product-app previews land on a fresh head. Settle the full verdict with one
    more `ci-status.sh` call; the operator's smoke and the **Ready to merge** tick follow it.
 

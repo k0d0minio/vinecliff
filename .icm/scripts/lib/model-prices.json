@@ -1,26 +1,107 @@
 {
   "_readme": [
-    "List prices usage-snapshot.sh multiplies a session's token counts by — USD per million tokens.",
+    "List prices usage-snapshot.sh multiplies a session's token counts by \u2014 USD per million tokens.",
     "TEMPLATE-OWNED and synced everywhere, so every repo prices its own lines identically and no",
     "repo has to reach icm-board for a number. Filled from the claude-api skill's Current Models",
-    "table (cached 2026-06-24) and its prompt-caching reference (cache reads 0.1x input, 0.025x on",
-    "claude-fable-5-1; cache writes 1.25x input for the 5-minute TTL, 2x for the 1-hour TTL) — never",
+    "Filled from Anthropic's published pricing page (platform.claude.com/docs/en/about-claude/pricing,",
+    "read 2026-09-26; cache reads 0.1x input, 0.025x on claude-fable-5-1 and 0.05x on claude-opus-5-5;",
     "from memory. A model missing here prices as cost_usd=unknown, never as zero. Amend deliberately",
     "in the template, bump as_of, and sync. A dated id (claude-haiku-4-5-20251001) matches its",
     "undated row; OpenCode sessions carry their own cost from models.dev and are recorded as-is."
   ],
-  "as_of": "2026-06-24",
+  "as_of": "2026-09-26",
   "unit": "USD per 1,000,000 tokens",
   "models": {
-    "claude-fable-5-1": { "input": 10.00, "output": 50.00, "cache_read": 0.25, "cache_write_5m": 12.50, "cache_write_1h": 20.00 },
-    "claude-mythos-5-1": { "input": 10.00, "output": 50.00, "cache_read": 1.00, "cache_write_5m": 12.50, "cache_write_1h": 20.00 },
-    "claude-fable-5":   { "input": 10.00, "output": 50.00, "cache_read": 1.00, "cache_write_5m": 12.50, "cache_write_1h": 20.00 },
-    "claude-opus-5":    { "input": 5.00,  "output": 25.00, "cache_read": 0.50, "cache_write_5m": 6.25,  "cache_write_1h": 10.00 },
-    "claude-opus-4-8":  { "input": 5.00,  "output": 25.00, "cache_read": 0.50, "cache_write_5m": 6.25,  "cache_write_1h": 10.00 },
-    "claude-opus-4-7":  { "input": 5.00,  "output": 25.00, "cache_read": 0.50, "cache_write_5m": 6.25,  "cache_write_1h": 10.00 },
-    "claude-opus-4-6":  { "input": 5.00,  "output": 25.00, "cache_read": 0.50, "cache_write_5m": 6.25,  "cache_write_1h": 10.00 },
-    "claude-sonnet-5":  { "input": 2.00,  "output": 10.00, "cache_read": 0.20, "cache_write_5m": 2.50,  "cache_write_1h": 4.00 },
-    "claude-sonnet-4-6": { "input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write_5m": 3.75,  "cache_write_1h": 6.00 },
-    "claude-haiku-4-5": { "input": 1.00,  "output": 5.00,  "cache_read": 0.10, "cache_write_5m": 1.25,  "cache_write_1h": 2.00 }
+    "claude-fable-5-1": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 0.25,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0
+    },
+    "claude-mythos-5-1": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0
+    },
+    "claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0
+    },
+    "claude-opus-5": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0
+    },
+    "claude-opus-5-5": {
+      "input": 4.0,
+      "output": 20.0,
+      "cache_read": 0.2,
+      "cache_write_5m": 5.0,
+      "cache_write_1h": 8.0
+    },
+    "claude-opus-4-8": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0
+    },
+    "claude-opus-4-7": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0
+    },
+    "claude-opus-4-6": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0
+    },
+    "claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write_5m": 2.5,
+      "cache_write_1h": 4.0
+    },
+    "claude-sonnet-4-6": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write_5m": 3.75,
+      "cache_write_1h": 6.0
+    },
+    "claude-haiku-4-5": {
+      "input": 1.0,
+      "output": 5.0,
+      "cache_read": 0.1,
+      "cache_write_5m": 1.25,
+      "cache_write_1h": 2.0
+    },
+    "claude-opus-4-5": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0
+    },
+    "claude-sonnet-4-5": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_write_5m": 3.75,
+      "cache_write_1h": 6.0
+    }
   }
 }
