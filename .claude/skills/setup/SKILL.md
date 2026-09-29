@@ -183,9 +183,10 @@ code file, except the one code change step 5 may agree (Husky), which rides the 
      [--single]`), the runner's
      collection if not `migrations`, the cluster's caps (`limits` — 100 databases / 500
      collections on a shared Atlas tier, 0 for uncapped; `name_bytes` 38 there, 63 on a
-     dedicated M10+ cluster), and `previews: branch` when each
-     preview should read its own `preview_<branch>` (the app derives it; one flag on the Preview
-     target switches it on). Isolation for a run: `neon` (one Neon branch per run — curl and the
+     dedicated M10+ cluster), and `previews: branch` when a PR
+     that adds a migration should get its own `preview_<branch>` while every other preview reads
+     the shared one (D47 — the app derives the name and falls back when it is absent; one flag on
+     the Preview target switches it on). Isolation for a run: `neon` (one Neon branch per run — curl and the
      key, no psql or docker), `database` (one MongoDB database per run, `run_<slug>`, on the
      repo's cluster — node and its installed driver), `schema` (one Postgres schema per run on
      the variable `url_env` names), `container` (one local Postgres per run), or `none` for a
@@ -276,8 +277,8 @@ code file, except the one code change step 5 may agree (Husky), which rides the 
    lists, and its two writes (`reset-uat`, `prune`) run only on `--apply` from the operator.
    **When a MongoDB cluster was declared**, run `.icm/scripts/db-env.sh init` the same way: it
    lists the database user's rights, the caps, and — with `previews: branch` — Vercel's system
-   variables, the app's one connection line (`.icm/scripts/lib/db-name.mjs`), the preview-migrate
-   workflow and the smoke check waiting on it, the reference `mongodb-cleanup.yaml`
+   variables, the app's connection code (`.icm/scripts/lib/db-name.mjs`, with the fallback to the shared
+   database), the preview-migrate workflow gated on a PR that adds a migration, and the smoke check waiting on it, the reference `mongodb-cleanup.yaml`
    (`setup.sh --fix --template <path>` seeds it), and last the flag
    `MONGODB_PREVIEW_PER_BRANCH=1` on the Preview target. The app change is a chore run in the
    repo, not an edit from here; the flag is the operator's to set, and unsetting it is the revert.
