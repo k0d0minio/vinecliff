@@ -92,8 +92,9 @@
 #                   migrate_command — the repo's own (the template never designs seeding; the
 #                   migrate command takes `up [<name>]` and `down <name>`), migrations_collection
 #                   — where the runner records applied migrations (default migrations), previews
-#                   "none" (default) | "branch" (the app derives `preview_<branch>` at runtime
-#                   behind MONGODB_PREVIEW_PER_BRANCH=1 — lib/db-name.mjs), uat_name — the
+#                   "none" (default) | "branch" (a PR that adds a migration gets
+#                   `preview_<branch>`, derived at runtime behind MONGODB_PREVIEW_PER_BRANCH=1 —
+#                   lib/db-name.mjs; every other preview reads preview_name, D47), uat_name — the
 #                   database behind the UAT environment, set on its variables by the operator
 #                   (required when uat is declared; never dropped but by reset-uat), limits {databases,
 #                   collections} — the cluster's caps (default 100 and 500, the shared Atlas

@@ -1,6 +1,6 @@
 ---
 name: project-lens
-description: Read-only analysis of this repo through one named lens (product, copy, ux, data, market, legal, tech), checked against the project's stated intent. Used by /setup (and icm-board's /project until it retires), which fans out several lenses at once and does all the writing. Give it one repo path and one lens per invocation.
+description: Read-only analysis of this repo through one named lens (product, copy, ux, data, market, legal, tech), checked against the project's stated intent. Used by /setup, which fans out several lenses at once and does all the writing. Give it one repo path and one lens per invocation.
 tools: Read, Glob, Grep, Bash, WebSearch, WebFetch
 ---
 

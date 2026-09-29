@@ -11,9 +11,11 @@
 #   production   database.mongodb.production_name — never dropped or reset by anything here.
 #   shared       database.mongodb.preview_name — the preview database every preview used before
 #                D35, and still uses while MONGODB_PREVIEW_PER_BRANCH is unset. Never dropped or reset.
-#   previews     `preview_<branch>` (lib/db-name.mjs) where mongodb.previews is `branch`: the app
-#                derives the name at runtime, the repo's preview-migrate workflow migrates and seeds
-#                it on each PR push, the reference mongodb-cleanup.yaml drops it when the PR closes.
+#   previews     `preview_<branch>` (lib/db-name.mjs) where mongodb.previews is `branch` — only for a
+#                PR that adds a migration (D47): the repo's preview-migrate workflow makes, migrates
+#                and seeds it on each push and drops it when a push no longer adds one, the app
+#                falls back to the shared database while it is absent, the reference
+#                mongodb-cleanup.yaml drops it when the PR closes.
 #   UAT          `database.mongodb.uat_name`, where uat is declared (D39): a long-lived database the
 #                operator names in /setup and sets on the UAT custom environment's variables.
 #                `reset-uat --apply` drops it and re-makes it with the repo's seed and migrate
@@ -131,8 +133,8 @@ if [ "$(database_provider)" = mongodb ]; then
     echo "  [INFO] cluster caps (database.mongodb.limits): $(mongo_limit_databases) databases · $(mongo_limit_collections) collections (0 = uncapped; the shared Atlas tiers cap both — every run and preview database counts) · names at most $(mongo_limit_name_bytes) bytes (38 on a shared Atlas tier, 63 on a dedicated one — lib/db-name.mjs hashes a longer branch down to it)"
     if [ "$previews" = branch ]; then
       echo "  [INFO] the app reads VERCEL_ENV and VERCEL_GIT_COMMIT_REF at runtime — Vercel exposes its system variables by default (there is no project toggle any more); nothing to switch on"
-      echo "  [TODO] the app reads its database name through lib/db-name.mjs → databaseName(process.env, \"$(mongo_name_env)\"$( [ "$(mongo_limit_name_bytes)" = 38 ] || echo ", $(mongo_limit_name_bytes)")) — the one line in its connection code (a chore; record it in project-rules.md)"
-      echo "  [TODO] the repo's preview-migrate workflow makes and migrates preview_<branch> on each PR push instead of the shared database:  $(mongo_name_env)=\"\$(node .icm/scripts/lib/db-name.mjs preview \"\$HEAD_REF\")\"  then \`<migrate_command> up\` and the seed command; its concurrency keys on the PR (one database per branch — no global queue). Where the seed creates no tenant or login, the preview opens on nothing: make the database on first push as a copy of $shared instead (mongodump | mongorestore --nsFrom/--nsTo on the one cluster — D36), and migrate $shared on each merge so it stays at main's shape"
+      echo "  [TODO] the app reads its database name through lib/db-name.mjs → databaseName(process.env, \"$(mongo_name_env)\"$( [ "$(mongo_limit_name_bytes)" = 38 ] || echo ", $(mongo_limit_name_bytes)")) and opens that database only when it exists (listCollections nameOnly, once per cold start), else $shared — a chore; record the file in project-rules.md"
+      echo "  [TODO] the repo's preview-migrate workflow gives preview_<branch> only to a PR that adds a migration (D47 — git diff --diff-filter=A --name-only \"\$BASE...\$HEAD\" -- <migrations.path>): then  $(mongo_name_env)=\"\$(node .icm/scripts/lib/db-name.mjs preview \"\$HEAD_REF\")\"  then \`<migrate_command> up\` and the seed command; otherwise it migrates nothing, says so in the job summary, and drops a preview_<branch> an earlier push made (lib/mongo.mjs drop). Its concurrency keys on the PR (one database per branch — no global queue). Where the seed creates no tenant or login, the preview opens on nothing: make the database on first push as a copy of $shared instead (mongodump | mongorestore --nsFrom/--nsTo on the one cluster — D36), and migrate $shared on each merge so it stays at main's shape"
       echo "  [TODO] the preview smoke check waits for that job — a preview's first request otherwise meets an empty database"
       if [ -f .github/workflows/mongodb-cleanup.yaml ] || [ -f .github/workflows/mongodb-cleanup.yml ]; then echo "  [OK]   .github/workflows/mongodb-cleanup.yaml present — drops preview_<branch> and run_<slug> when a PR closes"
       else echo "  [TODO] seed the reference cleanup workflow (setup.sh --fix --template <path>, or copy github-pipeline/workflows/mongodb-cleanup.yaml) — nothing else drops a closed PR's database"; fi

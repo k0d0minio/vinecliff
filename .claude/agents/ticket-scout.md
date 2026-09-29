@@ -1,6 +1,6 @@
 ---
 name: ticket-scout
-description: Read-only scan of this repo — surfaces undocumented in-flight work and ticket candidates from its docs and git history. Used by /setup (and icm-board's /project until it retires) and /day; give it a single repo path per invocation.
+description: Read-only scan of this repo — surfaces undocumented in-flight work and ticket candidates from its docs and git history. Used by /setup and /day; give it a single repo path per invocation.
 tools: Read, Glob, Grep, Bash
 ---
 

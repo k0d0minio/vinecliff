@@ -12,7 +12,7 @@ icm-board estate; `intake/README.md` here is the self-contained micro-copy.*
 ```
 .icm/
   CONTEXT.md            ← this file
-  project.md            ← what this project is for — written by /project, never by hand
+  project.md            ← what this project is for — written by /setup, never by hand
   intake/               ← the work: epics + triage (see intake/README.md)
     <epic-slug>/          breakdown.md + one stub per unit of work + _done/
     triage/               parked one-off bug/tweak/chore stubs

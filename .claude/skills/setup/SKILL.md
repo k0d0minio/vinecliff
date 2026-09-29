@@ -336,8 +336,8 @@ code file, except the one code change step 5 may agree (Husky), which rides the 
 
 D23 split adoption in two: this command filled the project-owned files, and icm-board's
 `/project` held intent, analysis and tickets, with nothing to stop the config being answered
-first. D45 fuses them here. icm-board's `/project` stays only as the fallback for a repo not
-yet carrying this version, and retires once every repo does. The estate walk (`/icm-check` in
+first. D45 fuses them here, and `/project` is retired: the one step a repo cannot do for
+itself — adoption, which needs the template — is `/icm-check adopt <repo>` in icm-board. The estate walk (`/icm-check` in
 icm-board) still runs each repo's `setup.sh --report` where the script exists — one
 implementation, two callers. The formatter guard (section 2) is reported with the exact lines
 to add and never written by a script (D17/D19). `setup.sh` itself is unchanged: this skill

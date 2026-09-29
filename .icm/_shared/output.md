@@ -68,7 +68,7 @@ Brevity never outranks reporting outcomes faithfully. Always said in full:
 ## What this does not cover
 
 Files — see the top: this doctrine never shortens a PR body, a spec, a record or a stub.
-icm-board's own commands (`/client`, `/project`, `/day`, `/icm-check`) and the global
+icm-board's own commands (`/client`, `/day`, `/icm-check`) and the global
 `~/.claude/CLAUDE.md` sit outside it — it governs the pipeline (stages, lanes, `/pipeline`,
 `/setup`) and the canonical `.claude` skills (`pr-conventions`, `ticket-craft`) synced into every
 estate repo. No Claude Code output style, no Stop-hook lint: harness-neutral (Claude Code and

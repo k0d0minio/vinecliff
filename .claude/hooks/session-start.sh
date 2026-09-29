@@ -80,7 +80,7 @@ if [[ -d "$intake/triage" ]]; then
 fi
 open=$((open + triage))
 
-# Legacy flat tickets (pre-2026-08-28 shape) — still open, awaiting a /project re-cut.
+# Legacy flat tickets (pre-2026-08-28 shape) — still open, awaiting a /setup re-cut.
 for f in "$intake"/[A-Z]*-[0-9]*.md; do
   [[ -e "$f" ]] || continue
   legacy=$((legacy + 1))

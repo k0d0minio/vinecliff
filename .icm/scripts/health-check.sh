@@ -9,6 +9,12 @@
 # message. It is one read at Release, bounded — decision D23 rejected a standing health-check
 # workflow — so nothing here schedules, watches, re-runs later, un-merges or rolls back.
 #
+# Redirects are followed (up to 5), but only a 200 on the endpoint's OWN host counts: a redirect
+# that lands on another host is the site not being served, however healthy that host is — so it
+# reads `<code>@<host>`, is not retried (it is configuration, not a slow start) and fails like any
+# other miss. Same host means the same name, ignoring scheme, port and a leading `www.` — so
+# http→https, a trailing slash and www↔apex stay OK.
+#
 # Where the endpoints come from (`.icm/project.json`, read by lib/project.sh → health_endpoints):
 #   health_endpoint                     a URL, or an array of URLs — the simple case
 #   deploy.projects[].health_endpoint   one per deployed project, when they differ
@@ -41,7 +47,7 @@
 #          [--expect <code>] [--timeout <seconds>] [--backoff <seconds>] [--header-env <VAR>]...
 #          [--no-alert] [--no-stub] [--dry-run]
 # Verdict (stdout, last line):
-#   RESULT: OK                 exit 0  — every endpoint answered <expect> (200) within the attempts
+#   RESULT: OK                 exit 0  — every endpoint answered <expect> (200), on its own host, within the attempts
 #   RESULT: FAIL <endpoint…>   exit 3  — at least one did not; the alert and the stub are described above
 #   RESULT: SKIP               exit 0  — no health endpoint declared and none passed
 #   RESULT: DRY-RUN            exit 0  — the endpoints and the attempt plan printed; nothing requested
@@ -69,7 +75,7 @@ while [ $# -gt 0 ]; do
     --no-alert)   alert=0; shift ;;
     --no-stub)    stub=0; shift ;;
     --dry-run)    dry=1; shift ;;
-    -h|--help)    sed -n '2,45p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)    sed -n '2,53p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *)            die "unknown argument: $1 (usage: health-check.sh [--sha <sha>] [--url <u>]... [--attempts n] [--expect code] [--timeout s] [--backoff s] [--header-env VAR]... [--no-alert] [--no-stub] [--dry-run])" ;;
   esac
 done
@@ -105,27 +111,40 @@ for v in "${header_envs[@]}"; do
   headers+=("${!v}")
 done
 
-# One GET. Prints "<http_code> <seconds>"; the code is 000 when curl itself failed (DNS, timeout,
-# refused). curl reads its configuration on stdin so a header value never appears in argv.
+# One GET. Prints "<http_code> <seconds> <final url>"; the code is 000 when curl itself failed (DNS,
+# timeout, refused). curl reads its configuration on stdin so a header value never appears in argv.
 probe() {
   local url="$1" cfg out h
-  cfg="url = \"$url\"\nlocation\nmax-redirs = 5\nmax-time = $timeout\nsilent\noutput = /dev/null\nuser-agent = \"icm-health-check\"\nwrite-out = \"%{http_code} %{time_total}\"\n"
+  cfg="url = \"$url\"\nlocation\nmax-redirs = 5\nmax-time = $timeout\nsilent\noutput = /dev/null\nuser-agent = \"icm-health-check\"\nwrite-out = \"%{http_code} %{time_total} %{url_effective}\"\n"
   for h in "${headers[@]}"; do cfg+="header = \"${h//\"/\\\"}\"\n"; done
   out="$(printf '%b' "$cfg" | curl --config - 2>/dev/null || true)"
-  case "${out%% *}" in [0-9][0-9][0-9]) printf '%s' "$out" ;; *) printf '000 0' ;; esac
+  case "${out%% *}" in [0-9][0-9][0-9]) printf '%s' "$out" ;; *) printf '000 0 -' ;; esac
+}
+
+# The name a URL points at, for the same-host test: no scheme, userinfo, port or path; lower-case;
+# a leading `www.` dropped.
+host_of() {
+  printf '%s' "$1" | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#[/?\#].*$##; s#^.*@##; s#:[0-9]+$##' \
+    | tr '[:upper:]' '[:lower:]' | sed -E 's#^www\.##'
 }
 
 declare -a failed=() record=()
 declare -A codes_of=()
 
 for url in "${urls[@]}"; do
-  ok=0; i=1; seen=""
+  ok=0; i=1; seen=""; home="$(host_of "$url")"
   while [ "$i" -le "$attempts" ]; do
     if [ "$dry" -eq 1 ]; then
       echo "  would GET $url — attempt $i/$attempts, expect $expect, timeout ${timeout}s$( [ "$i" -lt "$attempts" ] && echo ", then wait $(( backoff * (1 << (i - 1)) ))s" )"
       i=$((i + 1)); continue
     fi
-    out="$(probe "$url")"; code="${out%% *}"; secs="${out#* }"
+    out="$(probe "$url")"; code="${out%% *}"; rest="${out#* }"; secs="${rest%% *}"; landed="${rest#* }"
+    there="$(host_of "$landed")"
+    if [ "$code" != 000 ] && [ -n "$there" ] && [ "$there" != "$home" ]; then
+      code="$code@$there"; seen="${seen:+$seen,}$code"
+      echo "  $url → $code (${secs}s) on attempt $i/$attempts — redirected off-host to $landed; not retried"
+      break
+    fi
     seen="${seen:+$seen,}$code"
     if [ "$code" = "$expect" ]; then
       echo "  $url → $code (${secs}s) on attempt $i/$attempts"; ok=1; break

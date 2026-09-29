@@ -1,5 +1,5 @@
 ---
-description: "Read-only analysis of this repo through one named lens (product, copy, ux, data, market, legal, tech), checked against the project's stated intent. Used by /project, which fans out several lenses at once and does all the writing. Give it one repo path and one lens per invocation."
+description: "Read-only analysis of this repo through one named lens (product, copy, ux, data, market, legal, tech), checked against the project's stated intent. Used by /setup, which fans out several lenses at once and does all the writing. Give it one repo path and one lens per invocation."
 mode: subagent
 permission:
   edit: deny

@@ -105,11 +105,23 @@ today and reaches production only with its batch — schema and code move at the
 migration first. A failed production migration stops the release before the promote (the
 `- migrations:` line and the operator's recovery, as below).
 
-On a MongoDB repo with `database.mongodb.previews: branch`, every preview reads its own
-`preview_<branch>` — the app derives the name at runtime through `.icm/scripts/lib/db-name.mjs`
-once `MONGODB_PREVIEW_PER_BRANCH=1` is set on the Preview target — and the repo's preview-migrate
-workflow migrates and seeds it on each PR push; the smoke check waits for that job. With the flag
-unset, every preview shares `preview_name`, exactly as before.
+On a MongoDB repo with `database.mongodb.previews: branch` (D47), a preview gets a database of its
+own **only when its PR adds a migration** — a file under `migrations.path` on the branch and not
+on its merge-base with `main` (`git diff --diff-filter=A --name-only "$BASE...$HEAD" --
+<migrations.path>`); a model-only or index-only change does not qualify and runs against the
+shared database. For such a PR the repo's preview-migrate workflow makes `preview_<branch>` (the
+name from `.icm/scripts/lib/db-name.mjs`) on its first ready push — seeded, or a copy of
+`preview_name` (D36) — and migrates and seeds it on each push; the smoke check waits for that job.
+Every other PR's run migrates and seeds nothing and says so in its job summary: its preview reads
+`preview_name`, which the push-to-`main` run keeps at main's shape. The app opens
+`preview_<branch>` only when that database exists — a check a readWrite user can run
+(`listCollections` with `nameOnly`; empty means absent), once per cold start — and falls back to
+`preview_name`; a request that lands before CI's first copy finishes reads the shared database
+until the instance recycles. A PR that had its own database and stops adding a migration has it
+dropped on its next push (`lib/mongo.mjs drop`, which refuses anything but `preview_*`/`run_*`);
+`mongodb-cleanup.yaml` drops it when the PR closes. All of it waits on
+`MONGODB_PREVIEW_PER_BRANCH=1` on the Preview target; with it unset, every preview shares
+`preview_name`, exactly as before.
 
 ## After the merge
 
