@@ -1,42 +1,37 @@
-<!-- PIPELINE RUN — do not delete the markers; the pipeline reads them. -->
-
-## Summary
-
-<!-- one plain sentence: what a user can now do that they couldn't before -->
-
-## Spec
-
-| Field          | Value                                                                                                    |
-| -------------- | -------------------------------------------------------------------------------------------------------- |
-| **Slug**       | `<slug>`                                                                                                 |
-| **Personas**   | <persona(s)>                                                                                             |
-| **Complexity** | trivial \| standard \| complex                                                                           |
-| **Full spec**  | spec.md — canonical, read it there: `<link to .icm/runs/<slug>/02_define/output/spec.md on this branch>` |
-
-## Acceptance criteria
-
-<!-- text mirrored from spec.md — edit the spec, not these lines; the PR tracks tick state only -->
-
-_<n> criteria_
-
-- [ ] <criterion 1>
-- [ ] <criterion 2>
-
-## Steps to test
-
-1. Wait for Build to flip the PR ready — the affected product-app previews build on the post-flip push (drafts build no previews)
-2. Open those previews and <concrete steps to exercise the change>
-
----
+<!-- The desk reads this body. Keep the gate anchors. Write in Simplified Technical English. -->
 
 ### Gates
 
 <!-- gate:spec-approved -->
-
-- [ ] **Spec approved** — _Define gate: a human ticks this before Build starts._
+- [ ] **Spec approved** — Jamie ticks this before the build starts. Not required for a `low` stub or a triage stub: delete this line and its anchor.
 
 <!-- gate:ready-to-merge -->
-
-- [ ] **Ready to merge** — _Release gate: a human ticks this to authorise the squash-merge; the tick attests your own preview smoke-test._
+- [ ] **Ready to merge** — Jamie ticks this after he tests the preview. The tick authorises the merge.
 
 ---
+
+## Ticket
+
+- ticket: `.icm/intake/<epic>/<feature-slug>.md`
+- preview: <the Vercel preview URL, once it exists>
+
+## What changes
+
+<One to three sentences. What a user can do after the merge.>
+
+## Acceptance criteria
+
+- [ ] <Copied from the stub. Tick each line when the preview shows it.>
+
+## How to test
+
+1. Open the preview.
+2. <One step per line.>
+
+## Questions
+
+<Numbered. One per line. "Default: <answer>" after each. Delete the section when there is none.>
+
+## Parked
+
+<Triage stubs this pull request adds, one per line. "None" when none.>
