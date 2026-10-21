@@ -1,264 +1,184 @@
-# Intake — the batch formats, triage, and the archive rules
+# Intake — the tickets, and the loop that ships them
 
-`.icm/intake/` holds the sequenced batches of feature **stubs** that `/pipeline new` walks into
-Define — one folder per scope, one stub per future run / future PR — plus the `triage/` parking
-lane. This file owns the **formats** (breakdown and stub), the **triage** shape, and what happens
-**after the batch**. How a batch is cut — the seams, the build order, `validate-intake.sh` — is
-the Scope stage's job and lives in `.icm/stages/01_scope/CONTEXT.md` (step 6). There is no
-`/pipeline decompose` subcommand; the cut is the last thing Scope does.
+`.icm/intake/` holds every ticket of this repo. A ticket is a markdown **stub**. The stub's
+path is its identity. The stub's folder is its status. Nothing else records what is open,
+done or dropped: no ticket numbers, no board file, no `TODO.md` (why: one home for the work,
+in the repo where the work is · 2026-10-21).
 
-The stub folder is the only state (no branch or run PR of its own); Scope lands it with
-`scope.md` in one direct commit to `main`. Re-cutting after the human edits `breakdown.md` regenerates the stubs. **Every scope
-gets an intake folder, however small** — a single-PR scope gets exactly one stub whose
-`feature-slug` is the scope slug itself.
+This file is the whole contract. It stands alone: a session that reads only this file and
+`CLAUDE.md` can take the next ticket to a merged pull request.
 
-**Where ticket state lives (D39 (8)).** This folder has one home: `main`, in every repo, UAT or
-not. The board and every script that reads the queue read it there. Every write reaches it one of
-two ways: inside a run, the run's own PR (the stub it consumes, the triage stubs it parks, the
-close-out's archive move); outside a run — a cut, a drop, a `_done/` move, a parked finding, a
-`triage batch` or `prune` — a **direct commit to `main`**, pushed by the session
-(`.claude/skills/pr-conventions/SKILL.md`). No ticket PR, no second branch to reconcile.
+## Layout
 
-One audit may write here too, where the repo ships one (`_shared/project-rules.md` → Capability
-skills): a codebase-audit skill fired daily by a Claude Routine parks **at most one** finding a day
-in `triage/` — the triage stub shape below, `found-by: codebase-audit · <date>`, on its own
-one-file PR — and never cuts an epic of its own. There is no story and no `scope.md` behind it; a
-quiet day writes nothing.
-
-Two scripts may write here as well. `.icm/scripts/process-raw.sh` turns each client asset dropped in
-`.icm/raw/` into extracted text under `.icm/processed/` and parks **one triage stub per asset** —
-the triage shape below, `lane: chore`, `found-by: process-raw · <date>`, `complexity: research` —
-so an email or a voice note that arrived is on the board until somebody scopes it
-(`.icm/raw/README.md`). The stub is a pointer, never a cut: it names the processed file as a
-source for `/pipeline scope`, and Scope retires it to `triage/_done/` with a `- superseded-by:`
-line when it records that source (`stages/01_scope/CONTEXT.md` step 2). Nothing is scoped, split or
-sequenced by a script.
-
-`.icm/scripts/health-check.sh`, when production fails its one post-merge read (Release step 9a),
-writes **one stub per merge SHA** — `triage/health-check-<date>-<short-sha>.md`, the triage shape
-below, `lane: bug`, `found-by: health-check · <date>`, `complexity: high` — carrying the endpoint,
-the code each attempt saw, the merge SHA and the recoveries `rollback.sh` prepares. It writes
-the file and commits nothing: the stage names it in its stop message and the operator decides —
-land it for the bug lane (a direct ticket commit to `main`), or open `/pipeline hotfix` by hand. Nothing parks a stub for the
-hotfix lane.
-
-A **template change request** is parked here too (`_shared/template-change.md`): when a request
-in this repo would change a template-owned file — a `T` line of `.icm/MANIFEST`, or a canonical
-`.claude/` asset — the session writes no edit but one stub, `triage/template-change-<what>.md`,
-the triage shape below, `lane: chore`, `found-by: template-change · <date>`, whose `## Prompt` is
-the self-contained request for an icm-board session. It is a pointer, never a cut, and **no lane
-in this repo consumes it** — a chore run on it would be the edit the rule forbids; the board's
-"Copy prompt" hands it over, and the commit that brings the changed file back (the sync) retires
-it to `triage/_done/` with a `- superseded-by: icm-board <PR or commit>` line.
-
-**`.icm/intake/triage/` is the third resident** — the parking lane for off-ticket findings, with
-its own lighter stub shape (see **Triage** below). It is a permanent backlog folder, not an epic:
-no breakdown, no sequence, never walked by `/pipeline new`, never archived.
-
-## Formats
-
-`.icm/intake/<scope-slug>/breakdown.md` — the single review surface:
-
-```md
-# Breakdown: <scope title>
-
-- scope-slug: <slug> · story: runs/<slug>/01_scope/\_source/story.md
-- initiative: <name> / objective: <current-Q objective>
-- personas: <from the repo's persona vocabulary — `personas` in .icm/project.json>
-
-## What I understood
-
-<3–6 sentences restating the intent — so a misread is caught before the cuts>
-
-## Where it sits
-
-<the journey step(s) + entity(ies) this touches, named as the knowledge map's pages name them>
-
-## Build order
-
-<The exact order `/pipeline new` walks — a strict total order, one stub per line.>
-
-1. <feature-slug> — <one line> — depends-on: <none / other feature-slugs>
-2. <feature-slug> — <one line> — depends-on: <…>
-
-## Parallelizable
-
-<Derived, never asserted (decision D26): a parallel set holds only stubs whose `touches:`
-guesses do not overlap; omit if a plain chain. See "Parallelizable is derived" below.>
-
-## Out of scope (whole scope)
-
-- <carried from `scope.md` — what no stub covers this round>
+```
+.icm/intake/
+  CONTEXT.md             this contract
+  README.md              one paragraph for a person who opens the folder
+  <epic-slug>/           one folder per epic: related work, cut into order
+    breakdown.md         what was understood, and the build order
+    <feature-slug>.md    one stub per unit of work: one branch, one pull request
+    _done/               stubs whose pull request merged
+  triage/                one-off findings that belong to no epic
+    <slug>.md            a bug, a tweak or a chore
+    _done/
+  _done/                 epics whose last stub merged, moved whole
 ```
 
-`.icm/intake/<scope-slug>/<feature-slug>.md` — one per feature. The **handoff contract**:
-fields map mechanically onto Define's `spec.md`.
+Rules of the folder:
+
+- **Identity is the path.** A ticket is `<epic-slug>/<feature-slug>` or `triage/<slug>`.
+  Slugs are kebab-case. The `feature-slug` line in a stub equals its file name.
+- **Status is positional.** A stub in its epic folder is open. A stub in `_done/` is done.
+  Dropped work also moves to `_done/`, with a `> Dropped: <reason>, <date>` line at the top.
+  Nothing is deleted.
+- **`main` is the only home.** The desk and every reader read this folder on `main`. A stub
+  that is not pushed does not exist.
+- **The pull request that ships a stub is the pull request that retires it.** The move to
+  `_done/` is a commit on the ticket's branch. The merge makes it true.
+- **A new plan becomes stubs here**, as an epic with a breakdown, never a loose list.
+
+## The stub
 
 ```md
-# Stub: <feature title>
+# Stub: <title, one line, what the user can do after this ships>
 
-- feature-slug: <kebab>
-- scope: <scope-slug>
-- personas: <from the repo's persona vocabulary>
-- initiative: <name> / objective: <current-Q objective>
-- depends-on: <other feature-slugs, or none>
-- sequence: <n of m> # what `/pipeline new` reads to find "next"
-- complexity: <low | medium | high | research> # optional — carried from scope.md, sharpened per stub
-- priority: <P0 | P1 | P2> # optional — /day and the estate board rank across repos on it
-- recommended-model: <sonnet | opus | fable> # optional — what `select-model.sh` prints, or the operator's override
+- feature-slug: <kebab, equal to the file name>
+- epic: <epic-slug>
+- sequence: <n> of <m>
+- depends-on: <feature-slug, or none>
+- complexity: low | medium | high | research
+- priority: P0 | P1 | P2
+- blocked: <reason>            # optional. Remove the line when the block lifts.
 
 ## Problem
 
-<one-liner → seeds the spec's Problem; connect to the objective it advances>
+<What is wrong or missing today. One to three sentences.>
 
 ## Proposed change
 
-<what we'll build, functionally — not implementation detail>
+<What the build does, in the user's words. Not how.>
 
-## Acceptance criteria (rough)
+## Acceptance criteria
 
-- [ ] <observable, testable outcome>
+- [ ] <One observable result per line. The pull request copies these lines.>
 
-## Out of scope (this feature)
+## Out of scope
 
-- <things this feature explicitly won't do>
+- <What this stub does not do.>
 
-## Notes for Define
+## Notes
 
-<scope-level decisions Define must honour (name the `D-n` behind each) and any point left under
-`## Open for Define` in scope.md that lands here; optional `touches:` guess>
+<Decisions the build must keep. Files it will touch, when known. Optional.>
 ```
 
-**`## Parallelizable` is derived from `- touches:`, never asserted (decision D26).** Runs
-are cut for disjointness: a parallel set contains only stubs whose optional `touches:`
-guesses (in `Notes for Define`) do not overlap; two stubs that share a surface are sequenced,
-not parallelised. **The shared-file stubs go first in the build order** — the ones that touch
-the dependency manifest and lockfile (`pnpm-lock.yaml` conflicted 120 times in sustentus's
-last 300 commits, more than every other file combined), the schema and the migrations
-journal (`schema.ts` and `meta/_journal.json` lead remi-ai's list), the app layouts
-(`app/**/layout.tsx`) and the message catalogues — because every later stub merges over
-them. A stub with no `touches:` guess is sequenced after the ones that have one. Nothing
-here is a script: Scope reads the guesses and writes the section; `new-run.sh` warns when a
-new run's `touches:` overlaps a live run's; the operator decides.
+Required lines: the H1, `feature-slug`, `epic`, `sequence`, `depends-on`. The desk shows the
+others when they are present. `complexity` decides the first gate (see The loop).
 
-**`complexity` and `recommended-model` are optional, and older stubs carry neither.** Where they are
-present, `.icm/scripts/select-model.sh <epic>/<feature-slug>` reads them and prints the model the
-session that picks the stub up should be opened on — `sonnet` for `low`/`medium`, `opus` for
-`high`, `fable` for `research`; an explicit `recommended-model` wins; a stub with neither reads as
-`medium`. Add `--stage 02_define` (the advisor pass — `opus`) or `--stage 03_build` (the executor
-— `sonnet` unless `high`) and it prints the harness flag for that pass. It prints a
-recommendation and starts nothing (`_shared/scope-template.md` → Complexity and the model). The stub's word seeds Define's own `complexity:` in `spec.md`, which keeps its own
-vocabulary because the labels depend on it: `low → trivial`, `medium → standard`, `high → complex`;
-a `research` stub is a spike, and Define sets the spec's complexity from what the spike is.
+### The breakdown
 
-The order invariants — `sequence` unique and contiguous over the whole batch (`_done/` included),
-`of m` matching the stub count, every `depends-on` naming an in-batch stub sequenced first,
-`## Build order` and the stubs' `sequence:` agreeing — and the slug invariant (the scope slug is
-none of the names the board reserves for its pseudo-batches, `runs`, `triage`, `backlog`, nor
-`_done`, the archive) are checked by
-`.icm/scripts/validate-intake.sh <scope-slug>` → `RESULT: OK`. Scope runs it before pushing; a
-repo whose CI re-runs it advisorily on any PR touching `.icm/intake/**` (`_shared/project-rules.md`
-→ The factory says whether this one does) is what catches a later hand-edit to `breakdown.md`.
+`<epic-slug>/breakdown.md` is the epic's one review surface. Jamie reads it before any stub
+is built. Edit it and re-cut the stubs to steer.
 
-## Triage — the parking lane (`.icm/intake/triage/`)
+```md
+# Breakdown: <epic title>
 
-The pipeline's rule for anything found that is **not the current ticket's** — a review finding
-Release won't fix pre-merge, a wart Build steps around, a paper cut anyone spots in passing — is:
-**park it here as one small stub and move on.** Never widen a PR to absorb it, never lose it in a
-conversation. Writing the stub costs a minute; that is the whole point.
+- epic-slug: <slug>
+- source: <where the work came from: the proposal's scope, a call, a review>
 
-`.icm/intake/triage/<kebab-name>.md`:
+## What I understood
+
+<Three to six sentences. A misread is caught here, before any cut.>
+
+## Build order
+
+1. <feature-slug> — <one line> — depends-on: none
+2. <feature-slug> — <one line> — depends-on: <feature-slug>
+
+## Out of scope
+
+- <What no stub covers this round.>
+```
+
+The build order is strict: sequences run `1..m` with no gap, every `depends-on` names a stub
+sequenced earlier, and the order agrees with each stub's `sequence` line. The stubs that touch
+shared files (the lockfile, the schema, the layouts) go first (why: every later stub merges
+over them).
+
+### The triage stub
+
+Anything found that is not the current ticket's goes here, as one small stub, and the session
+moves on. Never widen a pull request to absorb it. Never lose it in chat.
 
 ```md
 # Stub: <title>
 
 - lane: bug | tweak | chore
-- found-by: <run slug / review / audit / conversation> · <YYYY-MM-DD>
-- complexity: <low | medium | high | research> # optional — read by `select-model.sh`
-- priority: <P0 | P1 | P2> # optional — /day and the estate board rank across repos on it
+- found-by: <where> · <YYYY-MM-DD>
+- complexity: low | medium | high | research
+- priority: P0 | P1 | P2
 
 ## Problem
 
-<observed, one or two lines; file paths if known>
+<Observed. One or two lines. File paths when known.>
 
 ## Proposed change
 
-<one line — or "investigate", if the fix isn't obvious>
+<One line, or "investigate".>
 ```
 
-Rules of the folder:
+No breakdown, no `sequence`, no `depends-on`. The folder is a backlog, not a batch. Jamie
+prunes it. A session only adds to it and consumes from it.
 
-- **No breakdown, no `sequence:`, no `depends-on`** — it is a backlog, not a batch.
-  `validate-intake.sh` checks only that each stub carries a valid `lane:` line.
-- **Consumed by the lanes, not by `new`**: `/pipeline bug|tweak|chore <stub-name>` resolves the
-  stub, pre-seeds the lane from it, and `new-run.sh --stub` moves it to `triage/_done/`.
-- An entry nobody will ever pick up is deleted, not hoarded — the human prunes, the agent only
-  adds and consumes (`triage prune` below lists the candidates; it never deletes).
-- The folder itself is **never archived**: `close-out.sh` skips it in the epic scan even when it
-  is empty.
-- **Cap: 60 active stubs** (top-level `.md` files; `_done/` does not count). Over the cap, every
-  stage or lane that parks a finding says so in its stop message — one line,
-  `triage/ holds N active stubs (cap 60) — run triage report` — and `triage report` is the
-  suggested next command. The cap changes nothing else: the finding is still parked (a PR is
-  never widened to dodge the notice), the lanes still consume, `new` still never reads the
-  folder. The number lives here; `triage-report.sh` carries it as its `--cap` default and prints
-  the verdict.
+## Writing rules
 
-### Managing the backlog — `triage report | batch | prune`
+Every stub, breakdown and pull request body is technical text. Write it in Simplified
+Technical English:
 
-The folder has one reader of its own, `.icm/scripts/triage-report.sh`, and three verbs on the
-router (`.claude/skills/pipeline/SKILL.md` → Resolving `triage`). None of them opens a run or a
-PR; `batch` writes an intake epic, the others only read.
+- Active voice. Simple tenses. One instruction per sentence. Sentences of 20 words or fewer.
+- One word for one thing, used the same way every time.
+- No semicolons. No phrasal verbs. No hedges removed: a "may" stays a "may".
+- A list for any sequence of three or more steps or conditions.
 
-- **`triage report`** — runs `.icm/scripts/triage-report.sh` and shows its markdown: active and
-  `_done/` counts against the cap, counts by lane, by found-by source (which Release review
-  pass, Build, a lane, an audit), by area (the `apps/<app>` / `packages/<pkg>` / `.icm` /
-  `.github` / `.claude` paths each stub cites) and by age (days since the found-by date, with
-  the over-30-days names listed), then the near-duplicates: titles sharing four or more
-  significant words, and stubs citing the same `file:line`. Deterministic — same folder, same
-  `--today`, same output; last line `RESULT: OK — …`. Read it before `batch` or `prune`, and
-  whenever a stop message says the folder is over its cap.
-- **`triage batch <area|lane> "<epic-title>"`** — the way findings leave this folder as a
-  **planned** batch instead of one lane PR at a time. The selector is an area from the report
-  (`apps/<app>`, `packages/<pkg>`, `.icm`, `.github`, …) or a lane (`bug` / `tweak` / `chore`).
-  The agent reads every matching active stub, **drops the duplicates first** — each superseded
-  stub is `git mv`'d to `_done/` with a line added under its `found-by:`,
-  `- superseded-by: <surviving-stub>.md — <why>` — then cuts the survivors into a normal intake epic
-  `.icm/intake/<epic-slug>/` (slug from the title) with `breakdown.md` and sequenced stubs in the
-  **Formats** above: one feature stub per shippable unit, grouping several small findings where
-  one PR would fix them together, `feature-slug` fixed at the cut, `depends-on` where a fix rests
-  on another, `sequence: n of m`. The originals move to `triage/_done/` with a
-  `- superseded-by: <epic-slug>/<feature-slug>.md` line, so the report stops counting them and
-  the trail survives. Then `.icm/scripts/validate-intake.sh <epic-slug>` → `RESULT: OK`, and
-  the agent **stops** — the epic is the review surface; `new` walks it once the human has read
-  `breakdown.md`. There is no story and no `scope.md` behind such an epic; the `story:` slot of
-  `breakdown.md`'s header line reads
-  `none — cut from triage/ by triage batch <selector>`. A `batch` that finds product decisions inside a stub leaves
-  that stub in place and says so; it does not decide.
-- **`triage prune`** — lists, for the human, the stubs older than 30 days (found-by date) and
-  the ones that look superseded: a title sharing four or more significant words with another
-  stub, the same `file:line` cited elsewhere, or a body naming a run or PR that has since
-  merged. One line per candidate — name, age, the reason — and the exact `git rm` for each.
-  **It never deletes.** The human confirms name by name; the agent then runs only the deletions
-  confirmed, in one direct ticket commit to `main`, and nothing else. A candidate that is a duplicate rather than dead
-  is better retired with a `superseded-by:` line into `_done/` (as `batch` does) than removed.
+A question for Jamie follows the same rules, and three more:
 
-## After the batch
+1. Number the questions. One question per line.
+2. Give a default answer after each question. Write "Default: <answer>".
+3. Make each question answerable with one word where that is possible.
 
-`/pipeline new` consumes stubs one at a time into `_done/`. When the last stub has been spun out
-**and** every one of those runs has merged, the epic folder is archived to the intake archive
-(`intake_archive` in `.icm/project.json`; `.icm/intake/_done/` by default) under
-`<scope-slug>/` — breakdown, `_done/` stubs and `_source/` intact. `.icm/intake/` therefore holds
-only epics with work left in them.
+Write the questions in the pull request body under `## Questions`, or in the breakdown under
+`## What I understood`, and stop. Do not build on a guess (why: Jamie reads on a phone, and a
+short numbered list with defaults is answered in one reply · 2026-10-21).
 
-****The front run archives with its scope** — `runs/<scope-slug>/` (Scope, no PR of its own) lives
-until the last stub of the scope has finished, regardless of UAT or promotion, and `close-out.sh`
-moves it with the scope (Jamie, 2026-09-26); a front still live after its scope archived is the
-missed close-out the hygiene report names.
+## The loop
 
-`_done/` alone is not the signal: it means spun out, not shipped** — the two ends of a stub's
-life sit in different stages. Define moves it into `_done/` when the run opens (`new-run.sh
---stub`); the epic is archived by `.icm/scripts/close-out.sh`, run on the branch by the Release
-that merges the batch's final run, which is why the script re-checks each sibling's PR rather than
-trusting the folder. That final run is excluded from its own sibling check — it is the one merging
-now, and its merge is what publishes the epic's move. Neither end is a later cleanup pass.
+One ticket is one branch and one pull request. A session runs the loop from `CLAUDE.md`.
+
+1. **Take the next stub.** Read `breakdown.md`, then the open stub with the lowest
+   `sequence` whose `depends-on` is in `_done/`. A triage stub needs no order.
+2. **Branch from `main`.** Name the branch after the stub: `<feature-slug>` or
+   `triage/<slug>`.
+3. **Open the pull request first, as a draft.** Use `.github/pull_request_template.md`. Fill
+   `Ticket`, `What changes` and `Acceptance criteria` from the stub. The body carries two
+   gates at its top.
+   - **Spec approved** is required when `complexity` is `medium`, `high` or `research`, and
+     for every stub whose `Notes` leave a decision open. Write what you will build and your
+     questions, push, and stop. Jamie ticks the box, then says "build".
+   - **Spec approved** is not required for a `low` stub or a triage stub. Delete its two lines
+     from the body (the anchor comment and the checkbox). A missing anchor means "not
+     required", never "unticked".
+4. **Build the ticket.** Commit in Conventional Commits form. Push. CI is the verdict: never
+   run build, lint, typecheck, test, format or dev locally. A red check: fix, commit, push,
+   read again.
+5. **Retire the stub on the branch.** `git mv` the stub into its epic's `_done/` (or
+   `triage/_done/`). Commit it with the work. Park every off-ticket finding as a triage stub
+   in the same pull request and list it under `Parked`.
+6. **Flip the pull request to ready** when CI is green and the preview exists. Put the
+   preview URL in the body. Tick nothing. Stop. Your last message names the pull request and
+   says what waits on Jamie.
+7. **Jamie tests the preview**, ticks **Ready to merge**, and merges. A session never merges
+   and never ticks a gate (why: the gate is where Jamie's judgement enters ·
+   2026-10-21).
+8. **After the merge** the epic whose last stub merged moves whole into `.icm/intake/_done/`,
+   in the next pull request that touches the folder, or by hand.
+
+Gates are human checkboxes. Read them. Never tick them.
