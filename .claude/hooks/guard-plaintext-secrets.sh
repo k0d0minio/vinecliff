@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guard-plaintext-secrets.sh — PreToolUse(Write|Edit|MultiEdit) guard.
+# guard-plaintext-secrets.sh — PreToolUse(Write|Edit|MultiEdit|Bash) guard.
 # Runs from ~/.claude/hooks/ as the machine-wide default, or from a repo's .claude/hooks/,
 # registered in that repo's .claude/settings.json. When the current project ships its own
 # copy, the global one defers to it.
@@ -13,7 +13,9 @@
 # instructions to move it to the environment. Placeholders (your-key-here, xxx, ${VAR},
 # process.env.X, <REDACTED>) are not secrets and never trip it.
 #
-# Contract: reads the PreToolUse payload on stdin, inspects the written text.
+# Contract: reads the PreToolUse payload on stdin, inspects the written text. For Bash the
+# text is the whole command, heredoc body included: a `cat > file <<EOF` writes a file too,
+# and auto mode prefers Bash for edits (2026-10-19). A redirect into an ignored .env passes.
 #   exit 0, no output → allow (also the fail-open path on malformed input or missing jq).
 #   exit 0 + permissionDecision "deny" → block, with the reason surfaced to the agent.
 set -euo pipefail
@@ -31,13 +33,20 @@ input="$(cat 2>/dev/null || true)"
 command -v jq >/dev/null 2>&1 || exit 0
 
 path="$(printf '%s' "$input" | jq -r '.tool_input.file_path // ""' 2>/dev/null || true)"
-# Write → .content; Edit → .new_string; MultiEdit → every edit's new_string.
+# Write → .content; Edit → .new_string; MultiEdit → every edit's new_string; Bash → .command.
 text="$(printf '%s' "$input" | jq -r '
   [ .tool_input.content? // empty,
     .tool_input.new_string? // empty,
-    (.tool_input.edits? // [] | .[].new_string? // empty)
+    (.tool_input.edits? // [] | .[].new_string? // empty),
+    .tool_input.command? // empty
   ] | join("\n")' 2>/dev/null || true)"
 [ -n "$text" ] || exit 0
+
+# A Bash command that redirects into a real .env names its file in the redirect, not in
+# file_path. Take the first redirect target as the path so the same exemption applies.
+if [ -z "$path" ]; then
+  path="$(printf '%s' "$text" | grep -oE '>>?[[:space:]]*[^[:space:];&|<>]+' | head -1 | sed -E 's/^>>?[[:space:]]*//' || true)"
+fi
 
 # A real, git-ignored .env is where secrets belong. .env.example / .env.sample are templates
 # that get committed, so they stay guarded.
