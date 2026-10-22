@@ -11,6 +11,9 @@ This file is the whole contract. It stands alone: a session that reads only this
 ## Layout
 
 ```
+.icm/scripts/
+  new-run.sh             start a ticket: branch, stub into _done/, draft pull request
+  close-out.sh           after the last stub: the epic folder into _done/
 .icm/intake/
   CONTEXT.md             this contract
   README.md              one paragraph for a person who opens the folder
@@ -151,34 +154,36 @@ short numbered list with defaults is answered in one reply · 2026-10-21).
 
 ## The loop
 
-One ticket is one branch and one pull request. A session runs the loop from `CLAUDE.md`.
+One ticket is one branch and one pull request. A session runs the loop from `CLAUDE.md`. Two
+scripts in `.icm/scripts/` do the git and GitHub mechanics of one step each. They decide
+nothing, tick nothing and merge nothing (why: a script does the same thing every time and costs
+no model turn, and the judgement stays with Jamie · 2026-10-21).
 
 1. **Take the next stub.** Read `breakdown.md`, then the open stub with the lowest
    `sequence` whose `depends-on` is in `_done/`. A triage stub needs no order.
-2. **Branch from `main`.** Name the branch after the stub: `<feature-slug>` or
-   `triage/<slug>`.
-3. **Open the pull request first, as a draft.** Use `.github/pull_request_template.md`. Fill
-   `Ticket`, `What changes` and `Acceptance criteria` from the stub. The body carries two
-   gates at its top.
-   - **Spec approved** is required when `complexity` is `medium`, `high` or `research`, and
-     for every stub whose `Notes` leave a decision open. Write what you will build and your
-     questions, push, and stop. Jamie ticks the box, then says "build".
-   - **Spec approved** is not required for a `low` stub or a triage stub. Delete its two lines
-     from the body (the anchor comment and the checkbox). A missing anchor means "not
-     required", never "unticked".
+2. **Start it with the script.** `.icm/scripts/new-run.sh <epic>/<slug>` (or
+   `triage/<slug>`) cuts the branch `<slug>` (or `triage/<slug>`) from `main`, moves the stub
+   into its `_done/`, pushes, and opens the draft pull request from
+   `.github/pull_request_template.md` with the ticket path and the acceptance criteria filled
+   in. The move is a status mark, not a gate. The merge makes it true.
+3. **Spec approved.** The script keeps the gate for a `medium`, `high` or `research` stub and
+   drops it for a `low` stub or a triage stub. A stub whose `Notes` leave a decision open
+   keeps the gate too: put the two lines back if the script dropped them. When the body
+   carries the gate: write what you will build and your questions, push, and stop. Jamie
+   ticks the box, then says "build". A missing anchor means "not required", never
+   "unticked".
 4. **Build the ticket.** Commit in Conventional Commits form. Push. CI is the verdict: never
    run build, lint, typecheck, test, format or dev locally. A red check: fix, commit, push,
    read again.
-5. **Retire the stub on the branch.** `git mv` the stub into its epic's `_done/` (or
-   `triage/_done/`). Commit it with the work. Park every off-ticket finding as a triage stub
-   in the same pull request and list it under `Parked`.
+5. **Close out on the branch.** Park every off-ticket finding as a triage stub in the same
+   pull request and list it under `Parked`. Then run `.icm/scripts/close-out.sh`: when an
+   epic has no open stub left and no sibling pull request is open, it moves the epic folder
+   into `.icm/intake/_done/` and commits. Push.
 6. **Flip the pull request to ready** when CI is green and the preview exists. Put the
    preview URL in the body. Tick nothing. Stop. Your last message names the pull request and
    says what waits on Jamie.
 7. **Jamie tests the preview**, ticks **Ready to merge**, and merges. A session never merges
    and never ticks a gate (why: the gate is where Jamie's judgement enters ·
    2026-10-21).
-8. **After the merge** the epic whose last stub merged moves whole into `.icm/intake/_done/`,
-   in the next pull request that touches the folder, or by hand.
 
 Gates are human checkboxes. Read them. Never tick them.
