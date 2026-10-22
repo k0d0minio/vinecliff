@@ -1,3 +1,5 @@
+> Dropped: ci.yml (#28) runs check-client on every pull request. The lint and typecheck scripts it would call are absent from package.json, a separate finding, 2026-10-22
+
 # Stub: No CI runs on a pull request
 
 - lane: chore
