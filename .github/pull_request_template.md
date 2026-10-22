@@ -12,6 +12,7 @@
 
 ## Ticket
 
+<!-- The ticket line is the stub's open path, its identity. On this branch the file sits in _done/. -->
 - ticket: `.icm/intake/<epic>/<feature-slug>.md`
 - preview: <the Vercel preview URL, once it exists>
 
