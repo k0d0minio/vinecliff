@@ -34,6 +34,17 @@ Rules of the folder:
 - **Status is positional.** A stub in its epic folder is open. A stub in `_done/` is done.
   Dropped work also moves to `_done/`, with a `> Dropped: <reason>, <date>` line at the top.
   Nothing is deleted.
+- **The ticket line names the open path.** The pull request body's `ticket:` line is the
+  stub's path when the ticket started: `.icm/intake/<epic-slug>/<feature-slug>.md` or
+  `.icm/intake/triage/<slug>.md`. The line does not change when the file moves (why: the
+  line is the ticket's identity, and a move changes the status, not the identity ·
+  2026-10-22). A reader that resolves the line to a file looks in this order:
+  1. The path as written. The stub is there on `main` while the pull request is open.
+  2. The same path with `_done/` before the file name. The stub is there on the branch from
+     its first commit, and on `main` after the merge.
+  3. `.icm/intake/_done/<epic-slug>/_done/<feature-slug>.md`. The stub is there after
+     close-out moves the epic.
+  A `> Dropped:` first line marks a dropped stub in any `_done/`.
 - **`main` is the only home.** The desk and every reader read this folder on `main`. A stub
   that is not pushed does not exist.
 - **The pull request that ships a stub is the pull request that retires it.** The move to
@@ -127,10 +138,16 @@ moves on. Never widen a pull request to absorb it. Never lose it in chat.
 ## Proposed change
 
 <One line, or "investigate".>
+
+## Acceptance criteria
+
+- [ ] <One observable result per line. The pull request copies these lines.>
 ```
 
-No breakdown, no `sequence`, no `depends-on`. The folder is a backlog, not a batch. Jamie
-prunes it. A session only adds to it and consumes from it.
+No breakdown, no `sequence`, no `depends-on`. The acceptance criteria are required:
+`new-run.sh` copies them into the pull request, and a stub without them gets one placeholder
+line to fill by hand. The folder is a backlog, not a batch. Jamie prunes it. A session only
+adds to it and consumes from it.
 
 ## Writing rules
 
@@ -179,9 +196,20 @@ no model turn, and the judgement stays with Jamie · 2026-10-21).
    pull request and list it under `Parked`. Then run `.icm/scripts/close-out.sh`: when an
    epic has no open stub left and no sibling pull request is open, it moves the epic folder
    into `.icm/intake/_done/` and commits. Push.
-6. **Flip the pull request to ready** when CI is green and the preview exists. Put the
-   preview URL in the body. Tick nothing. Stop. Your last message names the pull request and
-   says what waits on Jamie.
+6. **Finish the body, then flip the pull request to ready** when CI is green and the
+   preview exists. Before the flip:
+   - Set the title in Conventional Commits form, for example `chore(env): declare NODE_ENV
+     in .env.example`. The script opens the pull request with the stub's title as it is
+     (why: the squash merge makes the title the commit on `main`, and release-please reads
+     that commit · 2026-10-22).
+   - Put the preview URL on the `preview:` line. The preview URL is the deployment's branch
+     alias, `<project>-git-<branch>-<team>.vercel.app`. The vercel[bot] comment on the pull
+     request links it as Preview. The Vercel commit status links the inspector page, not
+     the preview.
+   - Fill `What changes` and `How to test`. Delete `Questions` when there is none. Write
+     `None` under `Parked` when the pull request adds no stub.
+   Tick nothing. Stop. Your last message names the pull request and says what waits on
+   Jamie.
 7. **Jamie tests the preview**, ticks **Ready to merge**, and merges. A session never merges
    and never ticks a gate (why: the gate is where Jamie's judgement enters ·
    2026-10-21).
