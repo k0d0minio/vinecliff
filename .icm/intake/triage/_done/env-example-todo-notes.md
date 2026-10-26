@@ -1,3 +1,5 @@
+> Dropped: legacy, written before the house kickoff. The go-live epic replaces it. 2026-10-26
+
 # Stub: .env.example carries 17 names with a TODO instead of a note
 
 - lane: chore
