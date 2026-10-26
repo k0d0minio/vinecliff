@@ -1,3 +1,5 @@
+> Dropped: legacy, written before the house kickoff. The go-live epic replaces it. 2026-10-26
+
 # Stub: Previews read and write the production database
 
 - lane: chore
