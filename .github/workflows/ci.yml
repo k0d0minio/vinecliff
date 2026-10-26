@@ -17,8 +17,6 @@ concurrency:
 jobs:
   check:
     uses: legible-consulting/.github/.github/workflows/check-client.yml@main
-    with:
-      tier: app
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
