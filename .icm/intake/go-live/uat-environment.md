@@ -2,11 +2,10 @@
 
 - feature-slug: uat-environment
 - epic: go-live
-- sequence: 5 of 9
+- sequence: 1 of 9
 - depends-on: none
 - complexity: medium
-- priority: P1
-- blocked: the repo is not yet updated to the blueprint with `release: yes` and `uat: yes`. Conformance runs `copier update` from the house.
+- priority: P0
 
 ## Problem
 

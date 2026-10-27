@@ -19,8 +19,10 @@ Run `copier update` to v1.0.0 with the answers of record. Keep the repo's own fi
 - [ ] `ci.yml` keeps the `release` job.
 - [ ] `.icm/uat/CONTEXT.md`, `.icm/scripts/promote.sh`, `.icm/scripts/rollback.sh` and `.github/workflows/promote.yml` exist.
 - [ ] `CLAUDE.md` has the release-or-promote merge row, the release CI row, the `release.sh` rule and the UAT rule.
+- [ ] `.env.example` lists the names of the v1.0.0 template: `MIGRATE_AT_BUILD`, `VERCEL_TOKEN`, `VERCEL_TEAM`, `VERCEL_PROJECT` and `NEON_API_KEY`.
+- [ ] The go-live stub `uat-environment.md` is `sequence: 1 of 9` and `priority: P0`, and has no `blocked:` line.
 - [ ] `ci` is green.
 
 ## Notes
 
-Jamie confirmed `release: true` and `uat: true` on 2026-10-27. `.icm/CONTEXT.md` stays: a separate pull request removes the legacy files. The UAT setup acts (the Vercel `uat` environment, the Neon `uat` branch, the DNS record) are the go-live stub `uat-environment.md`.
+Jamie confirmed `release: true` and `uat: true` on 2026-10-27. `.icm/CONTEXT.md` stays: a separate pull request removes the legacy files. The UAT setup acts (the Vercel `uat` environment, the Neon `uat` branch, the DNS record) are the go-live stub `uat-environment.md`. Jamie made that stub the first of the epic on 2026-10-27. The release job opens no release pull request yet because `main` has no `feat:` or `fix:` commit. It needs no change.
