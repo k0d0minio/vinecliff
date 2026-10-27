@@ -2,7 +2,7 @@
 
 - feature-slug: admin-password-change
 - epic: go-live
-- sequence: 4 of 9
+- sequence: 5 of 9
 - depends-on: none
 - complexity: medium
 - priority: P1

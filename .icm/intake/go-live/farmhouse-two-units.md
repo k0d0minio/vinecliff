@@ -2,7 +2,7 @@
 
 - feature-slug: farmhouse-two-units
 - epic: go-live
-- sequence: 2 of 9
+- sequence: 3 of 9
 - depends-on: none
 - complexity: medium
 - priority: P1

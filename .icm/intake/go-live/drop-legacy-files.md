@@ -2,7 +2,7 @@
 
 - feature-slug: drop-legacy-files
 - epic: go-live
-- sequence: 1 of 9
+- sequence: 2 of 9
 - depends-on: none
 - complexity: low
 - priority: P2

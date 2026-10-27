@@ -2,13 +2,40 @@
   "permissions": {
     "deny": [
       "Read(./**/.env)",
-      "Read(./**/.env.*)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Read(./**/.env.development)",
+      "Read(./**/.env.production)",
+      "Read(./**/.env.preview)",
+      "Read(./**/.env.staging)",
+      "Read(./**/.env.test)",
+      "Read(./**/.env.vercel)",
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
       "Read(./**/secrets/**)"
     ]
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/route-request.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

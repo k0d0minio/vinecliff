@@ -9,7 +9,7 @@ The site and the admin work today on `vinecliff.vercel.app` with placeholder rat
 
 The epic does six things. It splits the farmhouse into two bookable units, as the owner asked on 2026-10-22. It restyles the site around the owner's logo, which does not change (`.icm/docs/brand.md`). It lets an admin change their own password, so that the owner replaces the seeded one. It moves the site to `vinecliffvineyard.com` and sends every email from `info@vinecliffvineyard.com`. It adds basic error tracking with Sentry. It adds the terms and the privacy policy, written from US defaults.
 
-The owner tests each batch on a UAT environment before production (`uat: yes`). The repo is not yet updated to the blueprint version that renders UAT, so `uat-environment` is blocked until that update.
+The owner tests each batch on a UAT environment before production (`uat: yes`). The repo renders UAT from the blueprint v1.0.0. `uat-environment` is first and `P0` (Jamie, 2026-10-27): every batch after it reaches the owner on UAT, not on production.
 
 The site takes no payment online. A guest requests dates, the owner approves, and the owner collects the deposit off the site, as the build does today. Airbnb and VRBO calendar sync is not in this epic.
 
@@ -29,11 +29,11 @@ The site takes no payment online. A guest requests dates, the owner approves, an
 
 ## Build order
 
-1. drop-legacy-files — the old onboarding forms and `info.txt` leave the repo — depends-on: none
-2. farmhouse-two-units — the farmhouse becomes two bookable units — depends-on: none
-3. brand-from-the-logo — the site restyled around the owner's logo — depends-on: none
-4. admin-password-change — an admin changes their own password — depends-on: none
-5. uat-environment — the owner tests each batch at the UAT address — depends-on: none
+1. uat-environment — the owner tests each batch at the UAT address — depends-on: none
+2. drop-legacy-files — the old onboarding forms and `info.txt` leave the repo — depends-on: none
+3. farmhouse-two-units — the farmhouse becomes two bookable units — depends-on: none
+4. brand-from-the-logo — the site restyled around the owner's logo — depends-on: none
+5. admin-password-change — an admin changes their own password — depends-on: none
 6. site-on-the-domain — the site answers on vinecliffvineyard.com — depends-on: none
 7. email-from-info — every email comes from info@vinecliffvineyard.com — depends-on: site-on-the-domain
 8. error-tracking — Sentry sees each server error, and a guest sees a calm page — depends-on: none

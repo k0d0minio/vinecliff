@@ -2,7 +2,7 @@
 
 - feature-slug: brand-from-the-logo
 - epic: go-live
-- sequence: 3 of 9
+- sequence: 4 of 9
 - depends-on: none
 - complexity: medium
 - priority: P1

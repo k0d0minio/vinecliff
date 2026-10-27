@@ -1,0 +1,20 @@
+# gate: the pull request's contract and its merge gate, defined once in legible-consulting/.github
+# (CI is truth; never run locally). It listens to the edits of the body, so that Jamie's tick
+# starts a run. It is not in ci.yml: an edit runs these two small jobs only, never the build.
+# The repository's ruleset requires the check `gate / gate` on main.
+name: gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, ready_for_review, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    uses: legible-consulting/.github/.github/workflows/gate.yml@main
