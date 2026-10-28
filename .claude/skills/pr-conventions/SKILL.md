@@ -9,6 +9,9 @@ The contract is `.icm/intake/CONTEXT.md`. It holds every shape and the loop. Thi
 the git and GitHub mechanics that the contract does not hold. Where the two disagree, the
 contract wins.
 
+Every GitHub call is REST: `gh api`, `gh run` or `gh workflow run`. Never `gh pr`. The contract's
+§ The loop says why. `{owner}/{repo}` below is literal: `gh api` fills it from the git remote.
+
 ## Branches
 
 - A ticket's branch is `<slug>` or `triage/<slug>`. `.icm/scripts/new-run.sh` cuts it. Do not
@@ -34,18 +37,17 @@ contract wins.
 
 - Never run build, lint, typecheck, test, format or dev locally. Push, then read CI. A red
   check is the work. A green check is the proof.
-- One blocking read per push: `gh pr checks <n> --watch`. The wait happens inside `gh` and
-  costs no model turn. Do not loop on a sleep and a read. A new push needs a new read.
-- The call reads both surfaces of GitHub: the Actions check runs and the commit statuses.
+- One blocking read per push: `.icm/scripts/checks.sh <n> --watch`. The wait happens inside the
+  script and costs no model turn. Do not loop on a sleep and a read. A new push needs a new read.
+- The script reads both surfaces of GitHub: the Actions check runs and the commit statuses.
   Vercel reports on the commit statuses. A read of the check runs only misses the deployments.
 - Read the exit code:
   - `0`: every check passed.
-  - `8`: a check is pending.
-  - `1`: a check failed, or GitHub says `no checks reported`. Read the message.
-- `PENDING` is not green. An empty list just after a push is pending too: GitHub has not
-  registered the run yet, and `--watch` returns at once. Wait some seconds, then read again.
-- Read the description, not only the state. Use
-  `gh pr checks <n> --json name,bucket,description` when the difference matters.
+  - `8`: a check is still pending after 30 minutes.
+  - `1`: a check failed, or no check ran. Read the message.
+- Pending is not green. An empty list just after a push is pending too: GitHub has not
+  registered the run yet. `--watch` waits for it. Without `--watch`, an empty list exits `1`.
+- Read the description, not only the state. The script prints it after the state.
   - A Vercel row `Skipped - Not affected` passed and built nothing. That commit has no preview.
   - `Vercel Preview Comments` is a marker that always passes. It is no verdict.
 - Never subscribe to the events of a pull request. One push makes a burst of events:
@@ -61,12 +63,15 @@ contract wins.
 - The body follows `.github/pull_request_template.md`. The loop's step 6 says what to fill
   before the flip: the title, the `preview:` line, `What changes`, `How to test` and `Parked`.
 - Edit the body from the live body. Do these steps:
-  1. Read it with `gh pr view <n> --json body -q .body` into a file.
+  1. Read it into a file: `gh api repos/{owner}/{repo}/pulls/<n> --jq .body > <file>`.
   2. Change only your lines in that file.
-  3. Write it back with `gh pr edit <n> --body-file <file>`.
+  3. Write it back: `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<file>`.
 
   Never write a body from a local copy (why: Jamie ticks the gates on GitHub, and a stale copy
   removes the ticks · 2026-10-27).
+- Set the title: `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -f title="<title>"`.
+- Flip a draft to ready: `gh api -X POST repos/{owner}/{repo}/pulls/<n>/ccr/ready_for_review`. If
+  the call fails, say so in the stop report. Then Jamie flips it on GitHub.
 - Never tick a gate box. Remove a tick only where the contract's § Revise says so.
 - Keep each gate anchor as it is. The desk finds the gates by their anchors.
 

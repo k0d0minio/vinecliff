@@ -19,8 +19,10 @@ This file is the whole contract. It stands alone: a session that reads only this
 .icm/scripts/
   new-run.sh             start a ticket: branch, stub into _done/, draft pull request
   close-out.sh           after the last stub: the epic folder into _done/
+  checks.sh              read the checks of one pull request. --watch waits for a verdict
   merge.sh               merge one pull request after the Ready to merge tick
   release.sh             merge the release pull request on Jamie's word
+  lib/github.sh          the GitHub transport of the scripts: the REST API only
 .icm/intake/
   CONTEXT.md             this contract
   README.md              one paragraph for a person who opens the folder, and the order of the epics
@@ -290,6 +292,11 @@ scripts in `.icm/scripts/` do the git and GitHub mechanics of one step each. The
 nothing and tick nothing. `merge.sh` and `release.sh` merge only after the tick or Jamie's
 word. Without it, they refuse (why: a script does the same thing every time and costs no model
 turn · 2026-10-21). The judgement stays with Jamie.
+
+The scripts and the session reach GitHub through the REST API only: `gh api`, `gh run` and
+`gh workflow run`. Do not use `gh pr`, `gh release list` or `gh repo view`. They use GraphQL.
+A Claude Code cloud session gets HTTP 403 on GraphQL (why: a cloud session could not merge after
+the tick · 2026-10-28). The `pr-conventions` skill names the REST call for each step.
 
 0. **Resume.** `build <slug>`, or a slug with a branch, is a started ticket. Check out the
    branch `<slug>` (or `triage/<slug>`). Read the stub in `_done/`. Read the pull request body

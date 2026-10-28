@@ -23,7 +23,7 @@ from the loop in `.icm/intake/CONTEXT.md`. A request with an open question is no
    - Never touch data, auth or payments. Such a request is not a tweak: stop and say so.
    - Type: `fix:` or `style:`.
 4. **Build.** Do the loop's step 4. Commit with this lane's type from § Commit types. Push.
-   Read CI once with `gh pr checks <n> --watch`.
+   Read CI once with `.icm/scripts/checks.sh <n> --watch`.
 5. **Park.** Every finding that is not this ticket's becomes a triage stub in the same pull
    request, as the loop's step 5 says.
 6. **Ready.** Fill the `preview:` line. Flip the pull request to ready, as the loop's step 6

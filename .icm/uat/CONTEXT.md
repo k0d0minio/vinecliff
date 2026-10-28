@@ -46,8 +46,10 @@ ticket from stub to production.
   The client is only ever sent to the UAT address (why: a preview is one ticket on its own. The
   client tests the batch as it will ship · 2026-10-23).
 - **Inside the UAT environment `VERCEL_ENV` is `preview`.** A build decides what to do at build
-  from its own variables, never from `VERCEL_ENV` (why: Vercel types a custom environment as
-  preview. So `VERCEL_ENV` cannot tell UAT from a pull request · 2026-10-23).
+  from its own variables, never from `VERCEL_ENV`. `VERCEL_TARGET_ENV` tells UAT from a pull
+  request preview: its value is `uat` in UAT and `preview` in a pull request preview (why:
+  Vercel types a custom environment as preview. So `VERCEL_ENV` cannot tell UAT from a pull
+  request · 2026-10-23).
 
 ## The database
 

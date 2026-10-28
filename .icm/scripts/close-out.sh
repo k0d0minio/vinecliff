@@ -17,8 +17,15 @@ branch="$(git symbolic-ref --quiet --short HEAD || true)"
 case "$branch" in
   main|master|"") echo "run this on the ticket's branch, not on ${branch:-a detached head}" >&2; exit 1 ;;
 esac
-command -v gh >/dev/null 2>&1 || { echo "gh is not installed" >&2; exit 1; }
-open_heads="$(gh pr list --state open --limit 100 --json headRefName --jq '.[].headRefName' 2>/dev/null || true)"
+for t in gh jq; do
+  command -v "$t" >/dev/null 2>&1 || { echo "$t is not installed" >&2; exit 1; }
+done
+# The open pull requests, through the REST API (lib/github.sh says why). A failed read stops the
+# script: an empty list would close an epic while a sibling pull request is open.
+# shellcheck source=lib/github.sh
+source .icm/scripts/lib/github.sh
+pulls="$(gh_open_pulls)" || { echo "the open pull requests were not read. Nothing moved" >&2; exit 1; }
+open_heads="$(jq -r '.[].head.ref' <<<"$pulls")"
 
 moved=""
 for dir in .icm/intake/*/; do
