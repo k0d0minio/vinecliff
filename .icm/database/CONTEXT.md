@@ -6,10 +6,10 @@ files. Below, `<migrations_path>` is that folder.
 
 ## Inputs
 
-| Shape | Neon projects | The base | Reads the base | Integration | `MIGRATE_AT_BUILD=1` on | Production migrates |
+| Shape | Neon projects | The base | Reads the base | Integration | Migrates at build, by `VERCEL_TARGET_ENV` | Production migrates |
 |---|---|---|---|---|---|---|
 | With UAT | one for production, one for UAT | the UAT project's default branch | Vercel Preview and `uat` | Production only, or none | `uat` | in `promote.yml`, on `promote.sh run` |
-| Without UAT | one | its default branch, production's database | Vercel Preview | Production only, or none | Production | at the build of `main` |
+| Without UAT | one | its default branch, production's database | Vercel Preview | Production only, or none | Production, `production` | at the build of `main` |
 
 - `NEON_PROJECT_ID` names the project that holds the base. The preview branches are cut from
   it. With UAT, no script reaches the production project. `promote.yml` reaches it through
@@ -29,20 +29,25 @@ the Vercel Preview environment, scoped to the git branch. The pull request close
 (why: a migration must not change the base before the merge · Jamie, 2026-10-27).
 
 **The migration rule.** `package.json` names `db:migrate` and `db:verify`. The build's
-`vercel-build` script runs `db:migrate`, then `db:verify`, then the build, when
-`MIGRATE_AT_BUILD` is `1`. Otherwise it only builds:
+`vercel-build` script runs `db:migrate`, then `db:verify`, then the build, when one of two
+conditions is true. Otherwise it only builds. With UAT:
 
 ```json
-"vercel-build": "if [ \"$MIGRATE_AT_BUILD\" = 1 ]; then npm run db:migrate && npm run db:verify; fi && next build"
+"vercel-build": "if [ \"$VERCEL_TARGET_ENV\" = uat ] || [ \"$MIGRATE_AT_BUILD\" = 1 ]; then npm run db:migrate && npm run db:verify; fi && next build"
+```
+Without UAT:
+```json
+"vercel-build": "if [ \"$VERCEL_TARGET_ENV\" = production ] || [ \"$MIGRATE_AT_BUILD\" = 1 ]; then npm run db:migrate && npm run db:verify; fi && next build"
 ```
 
-- The variable means: this deployment owns its database. A preview branch carries it from
-  `preview-db.sh`. A plain preview never carries it (why: a preview without its own branch must
-  not migrate the base. The first build of a pull request can run before its branch
-  exists · 2026-10-27).
-- With UAT, `uat` carries it always and production never, because `promote.yml` migrates
-  production. Without UAT, Production carries it always: the build of `main` migrates
-  production, then serves it.
+- `VERCEL_TARGET_ENV` names the long-lived environment that owns its database: `uat` with UAT,
+  `production` without UAT. Vercel sets it at build, so no person sets it. In a pull request
+  preview its value is `preview`. A UAT slug other than `uat` goes in the condition.
+- `MIGRATE_AT_BUILD=1` marks a preview that owns its own Neon branch. Only `preview-db.sh` sets
+  it. A plain preview never carries it (why: a preview without its own branch must not migrate
+  the base. The first build of a pull request can run before its branch exists · 2026-10-27).
+- With UAT, production never migrates at build, because `promote.yml` migrates production.
+  Without UAT, the build of `main` migrates production, then serves it.
 - `db:migrate` uses `DATABASE_URL_UNPOOLED` when it has a value: a migration needs a direct connection.
 - A migration at build runs while the previous deployment still serves. So a migration must be
   forward-compatible with the code it replaces.
@@ -56,7 +61,7 @@ to repair a run that failed.
 
 - `preview/<git branch>` in the project that `NEON_PROJECT_ID` names, while the pull request is
   open, and its three variables on Vercel Preview, scoped to the git branch.
-- A migrated database for each deployment that carries `MIGRATE_AT_BUILD=1`.
+- A migrated database for each deployment whose `vercel-build` condition is true.
 
 ## Setup, once
 
@@ -66,18 +71,19 @@ Jamie does these by hand, before the first pull request with a migration.
 2. Vercel → Storage: the Neon integration connected to Production only, with preview branching
    off. Or not connected: then set Production's `DATABASE_URL` and `DATABASE_URL_UNPOOLED` by hand.
 3. Vercel → Settings → Environment Variables: `DATABASE_URL` and `DATABASE_URL_UNPOOLED` from
-   the base on Preview, and with UAT on `uat` too. `MIGRATE_AT_BUILD=1` on `uat` with UAT, on
-   Production without UAT. Never on Preview for all branches.
+   the base on Preview, and with UAT on `uat` too. Never `MIGRATE_AT_BUILD` on Preview for all
+   branches. Keep "Enable access to System Environment Variables" on for `VERCEL_TARGET_ENV`.
 4. GitHub → Settings → Secrets and variables → Actions. Secrets: `NEON_API_KEY`,
    `VERCEL_TOKEN`. Variables: `NEON_PROJECT_ID` (the base's project), `VERCEL_TEAM`, and
    `VERCEL_PROJECT` when the Vercel project's name differs from the repository's.
-5. `package.json`: `db:migrate`, `db:verify`, and `vercel-build` as the migration rule says.
+5. `package.json`: `db:migrate`, `db:verify`, and the `vercel-build` line of the build's shape.
 
 | Name | Holds | Where |
 |---|---|---|
 | `DATABASE_URL` | the pooled connection string of the environment's database | Vercel |
 | `DATABASE_URL_UNPOOLED` | the direct connection string of the same database | Vercel |
-| `MIGRATE_AT_BUILD` | `1` where the deployment owns its database | Vercel |
+| `MIGRATE_AT_BUILD` | `1` on a preview that owns its own Neon branch. Set by `preview-db.sh` only | Vercel Preview, scoped to the git branch |
+| `VERCEL_TARGET_ENV` | the deployment's environment, set by Vercel at build and at runtime | Vercel, a system variable |
 | `NEON_API_KEY` | a Neon API key for the organisation | Actions secret · the shell |
 | `NEON_PROJECT_ID` | the id of the project that holds the base | Actions variable · the shell |
 | `VERCEL_TOKEN`, `VERCEL_TEAM`, `VERCEL_PROJECT` | as in `.env.example` | Actions · the shell |

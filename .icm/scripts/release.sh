@@ -18,7 +18,9 @@
 #
 # The merge does not make the tag. The release job of the ci run on the merge commit makes it.
 # The script waits once for that run with gh run watch. Then it prints the newest release tag
-# from gh release list, and refuses when that tag does not point at the merge commit.
+# from GET releases, and refuses when that tag does not point at the merge commit.
+#
+# The reads and the merge use the REST API only, through lib/github.sh, which says why.
 # It decides nothing. The contract is .icm/intake/CONTEXT.md § After the tick, and
 # .icm/uat/CONTEXT.md § The promotion where that file exists.
 set -euo pipefail
@@ -29,6 +31,9 @@ for t in gh git jq; do
 done
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
+# shellcheck source=lib/github.sh
+source .icm/scripts/lib/github.sh
+repo="$(gh_repo)"
 
 fail=0
 refuse() {
@@ -37,8 +42,8 @@ refuse() {
 }
 
 # --- the release pull request ---------------------------------------------------------------------
-prs="$(gh pr list --state open --limit 100 --json number,title,url,headRefName,statusCheckRollup \
-  | jq -c '[.[] | select(.headRefName == "release-please--branches--main" or (.title | startswith("chore(main): release")))]')"
+prs="$(gh_open_pulls \
+  | jq -c '[.[] | select(.head.ref == "release-please--branches--main" or (.title | startswith("chore(main): release")))]')"
 count="$(jq 'length' <<<"$prs")"
 if [ "$count" -eq 0 ]; then
   echo "no release pull request is open. A merge to main makes release-please open one" >&2
@@ -51,16 +56,12 @@ fi
 pr="$(jq -c '.[0]' <<<"$prs")"
 n="$(jq -r '.number' <<<"$pr")"
 title="$(jq -r '.title' <<<"$pr")"
-url="$(jq -r '.url' <<<"$pr")"
+url="$(jq -r '.html_url' <<<"$pr")"
+pr_sha="$(jq -r '.head.sha' <<<"$pr")"
 # One line per check: its name, then ok, pending, or the failed conclusion.
-checks="$(jq -r '.statusCheckRollup[]? |
-  if .__typename == "StatusContext" then
-    "\(.context)\t\(if .state == "SUCCESS" then "ok" elif (.state | IN("PENDING", "EXPECTED")) then "pending" else (.state | ascii_downcase) end)"
-  else
-    "\(.name)\t\(if .status != "COMPLETED" then "pending" elif (.conclusion | IN("SUCCESS", "NEUTRAL", "SKIPPED")) then "ok" else (.conclusion | ascii_downcase) end)"
-  end' <<<"$pr")"
+checks="$(gh_checks "$pr_sha")"
 if [ -n "$checks" ]; then
-  while IFS=$'\t' read -r name verdict; do
+  while IFS=$'\t' read -r name verdict _; do
     [ "$verdict" = ok ] || refuse "#${n}: the check ${name} is ${verdict}"
   done <<<"$checks"
 fi
@@ -78,8 +79,11 @@ esac
 [ "$fail" -eq 0 ] || exit 1
 
 # --- the merge ------------------------------------------------------------------------------------
-gh pr merge "$n" --squash
-sha="$(gh pr view "$n" --json mergeCommit --jq '.mergeCommit.oid // empty')"
+# `sha` makes GitHub refuse the merge when a push moved the head after the read.
+merged="$(gh api -X PUT "repos/${repo}/pulls/${n}/merge" \
+  -f merge_method=squash -f sha="$pr_sha" -f commit_title="${title} (#${n})")" \
+  || { echo "#${n}: GitHub refused the merge. The line above gives the reason" >&2; exit 1; }
+sha="$(jq -r '.sha // empty' <<<"$merged")"
 [ -n "$sha" ] || { echo "#${n}: the merge commit was not read back. Read it on ${url}" >&2; exit 1; }
 echo "merged the release pull request #${n}: ${title}"
 echo "merge commit: ${sha}"
@@ -95,7 +99,7 @@ done
 echo "waiting once for the ci run ${run} on ${sha:0:7}: its release job makes the tag"
 gh run watch "$run" --exit-status >/dev/null \
   || { echo "the ci run ${run} on ${sha:0:7} failed. The tag may not exist. Read: gh run view ${run}" >&2; exit 1; }
-tag="$(gh release list --limit 1 --json tagName --jq 'first.tagName // empty')"
+tag="$(gh api "repos/${repo}/releases?per_page=1" | jq -r 'first.tag_name // empty')"
 [ -n "$tag" ] || { echo "no release exists after the ci run ${run}" >&2; exit 1; }
 git fetch -q --tags origin
 tag_sha="$(git rev-parse -q --verify "${tag}^{commit}" || true)"

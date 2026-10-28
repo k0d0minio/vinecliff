@@ -25,7 +25,8 @@
 #
 # Reads: gh (signed in), git, jq, curl, VERCEL_TOKEN, and VERCEL_TEAM, VERCEL_PROJECT,
 # UAT_ENVIRONMENT when set. Without VERCEL_TOKEN, status prints what git and GitHub know, and
-# approve and run refuse. The contract is .icm/uat/CONTEXT.md.
+# approve and run refuse. The GitHub reads and the record use the REST API only, through
+# lib/github.sh, which says why. The contract is .icm/uat/CONTEXT.md.
 # Exit: 0 reported, recorded or dispatched · 1 an error · 3 a refusal, named on stderr, RESULT: STOP.
 set -euo pipefail
 
@@ -50,6 +51,9 @@ done
 
 # shellcheck source=lib/vercel.sh
 source "$here/lib/vercel.sh"
+# shellcheck source=lib/github.sh
+source "$here/lib/github.sh"
+repo="$(gh_repo)"
 
 # --- git: the last release and the batch ---------------------------------------------------------
 git fetch -q --tags origin main
@@ -80,17 +84,19 @@ if [ "$verb" = run ]; then
 
   # The merged release pull request whose title names the version, as release-please writes it.
   version="${tag#v}"
-  rel="$(gh pr list --state merged --limit 20 --search "release ${version} in:title" --json number,url,title,headRefName,mergeCommit \
-    | jq -c --arg v "$version" '[.[] | select(.headRefName == "release-please--branches--main" or (.title | startswith("chore(main): release")))
+  rel="$(gh api "repos/${repo}/pulls?state=closed&per_page=100" \
+    | jq -c --arg v "$version" '[.[] | select(.merged_at != null)
+        | select(.head.ref == "release-please--branches--main" or (.title | startswith("chore(main): release")))
         | select(.title | split(" ") | index($v))] | first // empty')"
   [ -n "$rel" ] || stop "no merged release pull request names $version. release.sh merges it, on Jamie's word release"
   rel_n="$(jq -r '.number' <<<"$rel")"
-  rel_url="$(jq -r '.url' <<<"$rel")"
-  [ "$(jq -r '.mergeCommit.oid // empty' <<<"$rel")" = "$sha" ] \
+  rel_url="$(jq -r '.html_url' <<<"$rel")"
+  [ "$(jq -r '.merge_commit_sha // empty' <<<"$rel")" = "$sha" ] \
     || stop "the tag $tag at $tshort is not the merge commit of #$rel_n"
 
   # The sign-off: the last record that approve posted, and the commit its batch line names.
-  record="$(gh pr view "$rel_n" --json comments --jq '[.comments[] | select(.body | startswith("**UAT sign-off**"))] | last | .body // empty')"
+  record="$(gh api --paginate "repos/${repo}/issues/${rel_n}/comments?per_page=100" \
+    | jq -rs 'add // [] | [.[] | select(.body | startswith("**UAT sign-off**"))] | last | .body // empty')"
   [ -n "$record" ] \
     || stop "#$rel_n has no UAT sign-off record. On Jamie's word that the client approved: .icm/scripts/promote.sh approve --by \"<who>\""
   signed="$(printf '%s\n' "$record" | sed -nE 's/^- batch: `[^`]*\.\.([0-9a-f]+)`.*/\1/p' | head -n1)"
@@ -132,9 +138,10 @@ if [ "$verb" = run ]; then
 fi
 
 # --- GitHub: the release pull request and ci on main's head ----------------------------------------
-release_pr="$(gh pr list --state open --label 'autorelease: pending' --json number,url,title --jq 'first // empty' 2>/dev/null || true)"
+release_pr="$(gh api "repos/${repo}/issues?state=open&labels=autorelease%3A%20pending&per_page=100" 2>/dev/null \
+  | jq -c '[.[] | select(.pull_request)] | first // empty' 2>/dev/null || true)"
 pr_number="$(printf '%s' "$release_pr" | jq -r '.number // empty' 2>/dev/null || true)"
-pr_url="$(printf '%s' "$release_pr" | jq -r '.url // empty' 2>/dev/null || true)"
+pr_url="$(printf '%s' "$release_pr" | jq -r '.html_url // empty' 2>/dev/null || true)"
 pr_version="$(printf '%s' "$release_pr" | jq -r '.title // empty' 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
 ci="$(gh run list --workflow ci --branch main --commit "$head" --limit 1 --json status,conclusion \
   --jq 'first | "\(.status)\(if .conclusion then " " + .conclusion else "" end)"' 2>/dev/null || true)"
@@ -228,7 +235,7 @@ trap 'rm -f "$tmp"' EXIT
   echo
   echo "On Jamie's word \`release\`, the session merges this pull request with \`.icm/scripts/release.sh\`. On Jamie's word \`promote\`, the session runs \`.icm/scripts/promote.sh run --tag <tag>\`. Merge nothing else before it."
 } > "$tmp"
-gh pr comment "$pr_number" --body-file "$tmp" >/dev/null
+gh api -X POST "repos/${repo}/issues/${pr_number}/comments" -F body=@"$tmp" >/dev/null
 echo "recorded on $pr_url"
 echo "next: on Jamie's word release: .icm/scripts/release.sh"
 echo "      then on Jamie's word promote: .icm/scripts/promote.sh run --tag v${pr_version:-<version>}"

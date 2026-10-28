@@ -30,7 +30,7 @@ A hotfix is a bug that production shows now. This file says only what differs fr
    - Without `.icm/uat/CONTEXT.md`: production follows `main`, and the merge is the release.
    - Type: `fix:`.
 4. **Build.** Do the loop's step 4. Commit with this lane's type from § Commit types. Push.
-   Read CI once with `gh pr checks <n> --watch`.
+   Read CI once with `.icm/scripts/checks.sh <n> --watch`.
 5. **Park.** Every finding that is not this ticket's becomes a triage stub in the same pull
    request, as the loop's step 5 says.
 6. **Ready.** Fill the `preview:` line. Flip the pull request to ready, as the loop's step 6

@@ -5,7 +5,7 @@
 #        .icm/scripts/new-run.sh triage/<slug> [--ready] [--dry-run]
 #
 # The script reads the stub, cuts the branch from origin/main, moves the stub into its _done/
-# folder, commits, pushes, and opens the draft pull request from
+# folder, commits, pushes, and opens the draft pull request (POST pulls, the REST API) from
 # .github/pull_request_template.md with the ticket path and the acceptance criteria filled in.
 # It keeps the Spec approved gate for a medium, high or research stub and drops it for a low
 # stub or a triage stub. It decides nothing else. It never ticks a gate and never merges.
@@ -61,7 +61,9 @@ if [ "$tracked" -eq 0 ] && [ "$epic" != triage ]; then
   exit 1
 fi
 if [ "$dry" -eq 0 ]; then
-  command -v gh >/dev/null 2>&1 || { echo "gh is not installed" >&2; exit 1; }
+  for t in gh jq; do
+    command -v "$t" >/dev/null 2>&1 || { echo "$t is not installed" >&2; exit 1; }
+  done
   dirty="$(git status --porcelain --untracked-files=all)"
   if [ "$tracked" -eq 1 ]; then
     [ -z "$dirty" ] || { echo "the working tree is not clean. Commit or stash first" >&2; exit 1; }
@@ -136,11 +138,14 @@ fi
 git commit -q -m "chore(intake): start ${ref}"
 git push -q -u origin "$branch"
 
-if [ "$ready" -eq 1 ]; then
-  url="$(gh pr create --base main --head "$branch" --title "$title" --body-file "${tmp}/body")"
-else
-  url="$(gh pr create --draft --base main --head "$branch" --title "$title" --body-file "${tmp}/body")"
-fi
+# The pull request: POST pulls, the REST API. lib/github.sh says why.
+# shellcheck source=lib/github.sh
+source .icm/scripts/lib/github.sh
+repo="$(gh_repo)"
+draft=true
+[ "$ready" -eq 0 ] || draft=false
+url="$(gh api -X POST "repos/${repo}/pulls" -f title="$title" -f head="$branch" -f base=main \
+  -F draft="$draft" -F body=@"${tmp}/body" | jq -r '.html_url')"
 echo "$url"
 if [ "$need_spec" -eq 1 ]; then
   echo "next: Spec approved waits on Jamie. Write what you will build and your questions in the pull request, then stop."

@@ -264,7 +264,7 @@ case "$first_word" in
         if many; then route "two or more stubs carry the slug $slug: $(hit_list). Ask which one."; fi
         case "$tier" in
           shipped) route "$hits is in a closed epic: it shipped. Merge nothing. Say so." ;;
-          *) route "find the pull request with gh pr view $(branch_of) --json number, then run .icm/scripts/merge.sh <number> ($loop § The loop, step 7). It refuses without the Ready to merge tick. Then read ci on main once and say what moved ($hits)." ;;
+          *) route "find the number of the open pull request with gh api \"repos/{owner}/{repo}/pulls?head={owner}:$(branch_of)\" (REST, never gh pr), then run .icm/scripts/merge.sh <number> ($loop § The loop, step 7). It refuses without the Ready to merge tick. Then read ci on main once and say what moved ($hits)." ;;
         esac
       elif [ "$named" -eq 1 ]; then
         route "$(not_here "$slug")"

@@ -1,5 +1,10 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(.icm/scripts/merge.sh *)",
+      "Bash(.icm/scripts/release.sh)",
+      "Bash(.icm/scripts/release.sh *)"
+    ],
     "deny": [
       "Read(./**/.env)",
       "Read(./**/.env.local)",
