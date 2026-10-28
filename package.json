@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "bash .icm/scripts/vercel-build.sh next build",
     "start": "next start",
     "test": "tsx --test tests/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
+    "db:verify": "tsx scripts/verify-migrations.ts",
     "db:seed:demo": "tsx scripts/seed-demo.ts",
     "db:studio": "drizzle-kit studio"
   },
