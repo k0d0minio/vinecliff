@@ -7,3 +7,7 @@ The contract, the formats and the loop from stub to merge: `CONTEXT.md`.
 
 This page is the repo's own. Copier writes it once. What is true of this backlog goes below:
 the epics in order, the decisions of record that bind them, the milestones.
+
+## Order
+
+1. go-live
