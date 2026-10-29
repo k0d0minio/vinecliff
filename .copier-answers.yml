@@ -1,9 +1,8 @@
-_commit: v1.0.3
+_commit: v1.3.0
 _src_path: gh:legible-consulting/blueprint
 client_name: Vine Cliff Vineyards
 database: neon
 language: en-US
-migrations_path: drizzle
 monorepo: false
 release: true
 slug: vinecliff-vineyard

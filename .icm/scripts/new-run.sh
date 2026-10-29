@@ -4,20 +4,27 @@
 # Usage: .icm/scripts/new-run.sh <epic>/<slug> [--ready] [--dry-run]
 #        .icm/scripts/new-run.sh triage/<slug> [--ready] [--dry-run]
 #
-# The script reads the stub, cuts the branch from origin/main, moves the stub into its _done/
-# folder, commits, pushes, and opens the draft pull request (POST pulls, the REST API) from
+# The script reads the stub, finds the ticket's branch, moves the stub into its _done/ folder,
+# commits, pushes the branch, and opens the draft pull request (POST pulls, the REST API) from
 # .github/pull_request_template.md with the ticket path and the acceptance criteria filled in.
+# The branch comes from where the script runs:
+#
+#   on main             it cuts the branch <slug> (or triage/<slug>) from origin/main.
+#   on another branch   that branch is the ticket's branch. A worktree that a lane script made
+#                       for the ticket is on it already. The script makes no branch.
+#   on a detached HEAD  it stops and names the cause.
+#
 # It keeps the Spec approved gate for a medium, high or research stub and drops it for a low
 # stub or a triage stub. It decides nothing else. It never ticks a gate and never merges.
 #
 #   --ready    opens the pull request ready, not draft. The hotfix lane uses it. Any other use
 #              is the user's call.
-#   --dry-run  prints the title, the branch, the stub's move, draft or ready, and the full pull
-#              request body. It creates nothing: no branch, no commit, no push, no pull request.
+#   --dry-run  prints the case (main or worktree), the title, the branch, the stub's move, draft
+#              or ready, and the full pull request body. It creates nothing: no branch, no commit, no push, no pull request.
 #              It calls no gh and no git fetch, so it skips the clean-tree check and the remote
 #              branch check. The working tree is unchanged afterwards.
 #
-# A triage stub that a lane wrote and did not commit is carried onto the new branch, when it is
+# A triage stub that a lane wrote and did not commit is carried onto the branch, when it is
 # the one untracked file and the tree is otherwise clean. A tracked stub moves with git mv.
 # The contract is .icm/intake/CONTEXT.md.
 set -euo pipefail
@@ -48,6 +55,7 @@ esac
 epic="${ref%%/*}"
 slug="${ref##*/}"
 [ "$epic" != _done ] || { echo "the stub is already in _done/" >&2; exit 2; }
+[ "$epic" != setup ] || { echo "a setup stub is an act for a person, not a ticket: it gets no branch (.icm/intake/CONTEXT.md § The setup stub)" >&2; exit 2; }
 
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -85,9 +93,24 @@ fi
 need_spec=1
 case "$complexity" in low*) need_spec=0 ;; esac
 [ "$epic" != triage ] || need_spec=0
-if git show-ref --verify --quiet "refs/heads/${branch}"; then
-  echo "branch ${branch} exists. One ticket is one branch: finish it or delete it first" >&2
+
+# The case: on main the script cuts the ticket's branch. On another branch, a worktree's, that
+# branch is the ticket's branch (why: one ticket is one branch, and the lane script makes the
+# branch before the session starts · 2026-10-29).
+current="$(git symbolic-ref -q --short HEAD || true)"
+if [ -z "$current" ]; then
+  echo "HEAD is detached. Check out main, or the ticket's branch in its worktree, then run again" >&2
   exit 1
+fi
+if [ "$current" = main ]; then
+  case_name=main
+  if git show-ref --verify --quiet "refs/heads/${branch}"; then
+    echo "branch ${branch} exists. One ticket is one branch: finish it or delete it first" >&2
+    exit 1
+  fi
+else
+  case_name=worktree
+  branch="$current"
 fi
 
 # The acceptance criteria: the checklist lines under the stub's heading, as they are.
@@ -111,9 +134,16 @@ kind=draft
 [ "$ready" -eq 0 ] || kind=ready
 if [ "$dry" -eq 1 ]; then
   echo "dry run: nothing is created. The clean-tree check and the remote branch check are skipped."
+  if [ "$case_name" = main ]; then
+    echo "case: main. The run cuts the branch from origin/main."
+    base="origin/main"
+  else
+    echo "case: worktree. The run keeps the current branch and makes no branch."
+    base="none. The branch exists."
+  fi
   echo "title: ${title}"
   echo "branch: ${branch}"
-  echo "base: origin/main"
+  echo "base: ${base}"
   if [ "$tracked" -eq 1 ]; then echo "stub: tracked"; else echo "stub: untracked. The run carries it onto the branch."; fi
   echo "move: ${stub} -> ${done_dir}/${slug}.md"
   echo "pull request: ${kind}"
@@ -123,11 +153,13 @@ if [ "$dry" -eq 1 ]; then
 fi
 
 git fetch -q origin main
-if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-  echo "branch ${branch} exists on origin. One ticket is one branch: finish it or delete it first" >&2
-  exit 1
+if [ "$case_name" = main ]; then
+  if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+    echo "branch ${branch} exists on origin. One ticket is one branch: finish it or delete it first" >&2
+    exit 1
+  fi
+  git switch -q -c "$branch" origin/main
 fi
-git switch -q -c "$branch" origin/main
 mkdir -p "$done_dir"
 if [ "$tracked" -eq 1 ]; then
   git mv "$stub" "${done_dir}/${slug}.md"
