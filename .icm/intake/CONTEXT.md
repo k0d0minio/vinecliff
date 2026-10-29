@@ -33,6 +33,9 @@ This file is the whole contract. It stands alone: a session that reads only this
   triage/                one-off findings that belong to no epic
     <slug>.md            a bug, a tweak, a chore or a hotfix
     _done/
+  setup/                 the person acts that the answers need. Copier writes them
+    <slug>.md            one act in a dashboard or a settings page, done by a person
+    _done/               the acts that a person did
   _done/                 epics whose last stub merged, moved whole
 ```
 
@@ -59,6 +62,8 @@ Rules of the folder:
 - **The pull request that ships a stub is the pull request that retires it.** The move to
   `_done/` is a commit on the ticket's branch. The merge makes it true.
 - **A new plan becomes stubs here**, as an epic with a breakdown, never a loose list.
+- **A setup stub is not a ticket.** It has no branch and no pull request of its own. The
+  loop never takes it (§ The setup stub).
 
 ## The stub
 
@@ -171,6 +176,45 @@ No breakdown, no `sequence`, no `depends-on`. The stub needs its acceptance crit
 `new-run.sh` copies them into the pull request, and a stub without them gets one placeholder
 line to fill by hand. The folder is a backlog, not a batch. Jamie prunes it. A session only
 adds to it and consumes from it.
+
+### The setup stub
+
+Some setup only a person can do: a project in a dashboard, a secret, a setting. Copier writes
+one stub for each such act into `setup/`, from the answers in `.copier-answers.yml`. A new
+answer or a new blueprint tag adds the stubs of its acts at the next `copier update`. Copier
+never writes a stub again after a person moved it (why: the list of setup acts stays true
+with each update, so no person forgets an act · Jamie, 2026-10-28).
+
+```md
+# Setup: <the act, one line>
+
+- setup-slug: <kebab, equal to the file name>
+- needs: <the answers that ask for this act>
+- where: <the dashboard or the settings page>
+
+## Why
+
+<What fails without the act. One or two sentences.>
+
+## Steps
+
+1. <One instruction per line.>
+
+## Done when
+
+- [ ] <One observable result per line.>
+```
+
+- **Open or done is positional**, as for every stub. A stub in `setup/` is open. A stub in
+  `setup/_done/` is done.
+- **A person does the act, then says so.** On the person's word "setup <slug> done", a session
+  moves the stub into `setup/_done/`, adds the first line `> Done: <who>, <YYYY-MM-DD>`, and
+  commits the move on its branch. The merge makes it true. A session never moves a setup stub
+  on a guess, on a file's word or on a check that passed (why: a check reads part of an act, the
+  person did all of it · 2026-10-28).
+- **An act that does not apply** moves to `setup/_done/` with `> Dropped: <reason>, <date>`.
+- `session-start.sh` prints the open setup stubs at each session start, and the stop report
+  names each open one under `Operator:` when the work waits on it.
 
 ### The order of the epics
 
@@ -316,8 +360,15 @@ the tick · 2026-10-28). The `pr-conventions` skill names the REST call for each
    `priority`, then the first by file name. With one epic open and no `## Order`, start at
    that epic's `breakdown.md`.
 2. **Start it with the script.** `.icm/scripts/new-run.sh <epic>/<slug>` (or
-   `triage/<slug>`) cuts the branch `<slug>` (or `triage/<slug>`) from `main`, moves the stub
-   into its `_done/` and pushes. Then it opens the draft pull request from
+   `triage/<slug>`) finds the ticket's branch from where it runs:
+   - On `main`, it cuts the branch `<slug>` (or `triage/<slug>`) from `origin/main`.
+   - In a worktree on another branch, that branch is the ticket's branch. The lane script made
+     the worktree on it. The script makes no branch.
+   - On a detached HEAD, it stops.
+
+   The script cuts a branch only from `main` (why: one ticket is one branch, and in a worktree
+   the branch exists before the session · 2026-10-29). Then it moves the stub into its
+   `_done/`, commits and pushes the branch. Then it opens the draft pull request from
    `.github/pull_request_template.md`, with the ticket path and the acceptance criteria filled
    in. The move is a status mark, not a gate. The merge makes it true.
 3. **Spec approved.** The script keeps the gate for a `medium`, `high` or `research` stub and
@@ -363,9 +414,12 @@ the new one · Jamie, 2026-10-27).
 7. **Jamie tests the preview** and ticks **Ready to merge**. Then the session runs
    `.icm/scripts/merge.sh <n>`, on `merge <slug>`, or in the session that built the ticket
    when Jamie says so. The script refuses without the tick. Read `ci` on `main` once. Say what
-   moved: the UAT address where `.icm/uat/CONTEXT.md` exists, production otherwise (why: Jamie
-   ticks from the phone, and the session does the mechanics · Jamie, 2026-10-27). Where
-   `.icm/uat/CONTEXT.md` exists, production moves on the promotion that contract describes.
+   moved, and name its address from `.icm/environments.md`: the UAT row where
+   `.icm/uat/CONTEXT.md` exists, the Production row otherwise. Never guess an address. A cell
+   that holds `<…>` is not filled: say so (why: Jamie ticks from the phone, and the session
+   does the mechanics · Jamie, 2026-10-27. The table is the one home of the addresses ·
+   2026-10-29). Where `.icm/uat/CONTEXT.md` exists, production moves on the promotion that
+   contract describes.
 
 Gates are human checkboxes. Read them. Never tick them. The merge after the tick is the
 session's.
@@ -410,6 +464,7 @@ Operator:
 Unverified: <skipped, unproven or assumed>
 ```
 
+- Under `Operator:`, name each open setup stub that the work waits on, by its path.
 - Leave out `Operator:` when there is no act. Leave out `Unverified:` when it is empty.
 - Name a gate with its pull request link. The box is in the body, never in the chat.
 - Never trim these: a STOP and its reason, a red check, a skipped step, a plaintext credential

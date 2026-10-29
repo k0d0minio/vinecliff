@@ -105,7 +105,8 @@ has() { [[ $p =~ $1 ]]; }
 
 # resolve_slug <token> → returns 0 and sets $tier and $hits (the relative paths, one per line)
 # for the first tier with a hit. Tiers: open (an epic stub), triage (an open triage stub),
-# started (a stub in any _done/), shipped (a stub in a closed epic). `breakdown` is never a slug.
+# started (a stub in any _done/), shipped (a stub in a closed epic). `breakdown` is never a slug,
+# and a setup stub is never a ticket.
 tier=""; hits=""
 resolve_slug() {
   local tok="$1" ep="*" s="$1" f
@@ -114,7 +115,7 @@ resolve_slug() {
   [ "$s" != "breakdown" ] || return 1
   for f in "$intake"/$ep/"$s.md"; do
     [ -f "$f" ] || continue
-    case "${f#"$intake"/}" in triage/*|_done/*) continue ;; esac
+    case "${f#"$intake"/}" in triage/*|setup/*|_done/*) continue ;; esac
     hits="${hits:+$hits
 }${f#"$root"/}"
   done
@@ -124,7 +125,7 @@ resolve_slug() {
   esac
   for f in "$intake"/$ep/_done/"$s.md"; do
     [ -f "$f" ] || continue
-    case "${f#"$intake"/}" in _done/*) continue ;; esac
+    case "${f#"$intake"/}" in _done/*|setup/*) continue ;; esac
     hits="${hits:+$hits
 }${f#"$root"/}"
   done
@@ -219,7 +220,7 @@ case "$first_word" in
           route "two or more stubs carry the slug $slug: $(hit_list). Ask which one, then run .icm/scripts/new-run.sh <epic>/<slug> ($loop § The loop, step 2)."
         fi
         case "$tier" in
-          open) route "read the stub $hits, then run .icm/scripts/new-run.sh $(ticket_of) ($loop § The loop, step 2). When the branch $(branch_of) exists, new-run.sh refuses: resume at step 0." ;;
+          open) route "read the stub $hits, then run .icm/scripts/new-run.sh $(ticket_of) ($loop § The loop, step 2). On main, when the branch $(branch_of) exists, new-run.sh refuses: resume at step 0." ;;
           triage)
             lane="$(lane_of)"
             route "the open triage stub $hits. Read .icm/lanes/${lane:-<its lane>}/CONTEXT.md, then run .icm/scripts/new-run.sh $(ticket_of) (the lane line of the stub)." ;;

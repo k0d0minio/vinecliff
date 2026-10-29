@@ -1,32 +1,32 @@
-# Database — the Neon base, a preview branch for a migration, and the migration at build
+# Database — the Neon projects, a branch for each preview, and the migration at build
 
 This build answered `neon` to `database` in `copier.yml`. This file is the database rule for
-every environment. `.copier-answers.yml` names `migrations_path`, the folder of the migration
-files. Below, `<migrations_path>` is that folder.
+every environment. Three rules make it: isolation by Neon project, a Neon branch for each
+preview, and a migration at build that holds a lock.
 
 ## Inputs
 
-| Shape | Neon projects | The base | Reads the base | Integration | Migrates at build, by `VERCEL_TARGET_ENV` | Production migrates |
-|---|---|---|---|---|---|---|
-| With UAT | one for production, one for UAT | the UAT project's default branch | Vercel Preview and `uat` | Production only, or none | `uat` | in `promote.yml`, on `promote.sh run` |
-| Without UAT | one | its default branch, production's database | Vercel Preview | Production only, or none | Production, `production` | at the build of `main` |
+| Shape | Neon projects | Preview reads | UAT reads | Production reads | Production migrates |
+|---|---|---|---|---|---|
+| With UAT | `<slug>` and `uat-<slug>` | its own branch of `uat-<slug>` | the default branch of `uat-<slug>` | the default branch of `<slug>` | in `promote.yml`, on `promote.sh run` |
+| Without UAT | `<slug>` | its own branch of `<slug>` | — | the default branch of `<slug>` | at the build of `main` |
 
-- `NEON_PROJECT_ID` names the project that holds the base. The preview branches are cut from
-  it. With UAT, no script reaches the production project. `promote.yml` reaches it through
-  the secret `DATABASE_URL` only.
-- A preview without a migration reads and writes the base's rows. A tester knows it (why: a
-  preview that changes no schema needs no copy · Jamie, 2026-10-27).
-- The Neon integration never serves Preview. It makes a branch for every pull request, and the
-  branch rule below makes one only for a migration.
+- **Isolation is by Neon project.** With UAT, only Vercel Production and `promote.yml` reach
+  `<slug>`. Each other deployment reads `uat-<slug>` (why: a separate project is the strongest
+  wall between the client's production data and a preview · Jamie, 2026-10-28).
+- **Neon makes each preview's database.** The Neon integration on Vercel cuts the branch
+  `preview/<git branch>` from the default branch, with its data, when the first deployment of
+  a git branch starts. It sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED` on Preview for that
+  git branch. It deletes the branch when the git branch is deleted. No script and no workflow
+  of this build makes or deletes a branch (why: the integration makes the branch before the
+  build, so no build runs without its database · Jamie, 2026-10-28).
+- **No `DATABASE_URL` on Preview for all branches.** A preview without its branch fails its
+  build, and never reads or writes the UAT database (why: a shared preview database mixed the test rows
+  of each pull request into the client's UAT data · Jamie, 2026-10-28).
+- Without UAT, a preview branch copies production's data. A build with personal data in
+  production answers yes to `uat`.
 
 ## Process
-
-**The branch rule.** A pull request whose diff touches `<migrations_path>/**` gets the Neon
-branch `preview/<git branch>`. `preview-db.yml` cuts it from the base, with the base's data.
-The branch has its own `DATABASE_URL`, `DATABASE_URL_UNPOOLED` and `MIGRATE_AT_BUILD=1`, on
-the Vercel Preview environment, scoped to the git branch. The pull request closes, and
-`neon-cleanup.yml` deletes the branch and the three variables. Nothing else deletes a branch
-(why: a migration must not change the base before the merge · Jamie, 2026-10-27).
 
 **The migration rule.** `package.json` names `db:migrate` and `db:verify`. Its `vercel-build`
 line calls the blueprint's script, and the line never changes (why: the rule lives in a file
@@ -36,54 +36,54 @@ that `copier update` changes, so a new tag reaches every build · Jamie, 2026-10
 "vercel-build": "bash .icm/scripts/vercel-build.sh next build"
 ```
 
-- `.icm/scripts/vercel-build.sh` runs `db:migrate`, then `db:verify`, then the build command,
-  when one of two conditions is true. Otherwise it only builds. A package below the root
-  calls `../.icm/scripts/vercel-build.sh`.
-- `VERCEL_TARGET_ENV` names the long-lived environment that owns its database: `uat` with UAT,
-  `production` without UAT. Vercel sets it at build, so no person sets it. In a pull request
-  preview its value is `preview`.
-- `MIGRATE_AT_BUILD=1` marks a preview that owns its own Neon branch. Only `preview-db.sh` sets
-  it. A plain preview never carries it (why: a preview without its own branch must not migrate
-  the base. The first build of a pull request can run before its branch exists · 2026-10-27).
-- With UAT, production never migrates at build, because `promote.yml` migrates production.
-  Without UAT, the build of `main` migrates production, then serves it.
+- `.icm/scripts/vercel-build.sh` runs `db:migrate`, then `db:verify`, then the build command.
+  With UAT it skips the migration when `VERCEL_TARGET_ENV` is `production`, because
+  production's build runs at the merge to `main`, before the sign-off. `promote.yml` migrates
+  production. Without UAT, every build migrates, production too.
+- Vercel sets `VERCEL_TARGET_ENV` at build, and no person sets it. Without it, the script stops.
 - The script gives `db:migrate` and `db:verify` `DATABASE_URL_UNPOOLED` as `DATABASE_URL` when
   it has a value: a migration needs a direct connection.
+- **`db:migrate` holds a Postgres advisory lock** for the whole run, and releases it at the
+  end. Two builds can migrate one database at the same time: two apps of a monorepo on `uat`,
+  or two pushes to one branch. The lock makes the second run wait, then find nothing to apply
+  (why: the migration tool does not lock by itself · Jamie, 2026-10-28).
+- **A monorepo calls the script from each app's `vercel.json`.** Vercel runs `turbo run build`
+  there, not `vercel-build`. Each app that reads the database names `db:migrate` and
+  `db:verify` in its own `package.json`, and its `vercel.json` has the line
+  `"buildCommand": "bash ../../.icm/scripts/vercel-build.sh turbo run build"`. The script
+  migrates before turbo starts, so `turbo.json` names no variable for it (why: turbo's strict
+  mode removes `DATABASE_URL` from a task that `turbo.json` does not name, and a cache hit
+  skips the task · 2026-10-28). A package one level below the root calls `../.icm/scripts/`.
 - A migration at build runs while the previous deployment still serves. So a migration must be
   forward-compatible with the code it replaces.
 
-**The script.** `.icm/scripts/preview-db.sh <verb> <git branch>`. `create`, `delete` and
-`status`. `create` redeploys the branch's newest preview only when it changed something. The
-two workflows run it. A session runs `status` to read a branch, and `create` or `delete` only
-to repair a run that failed.
-
 ## Outputs
 
-- `preview/<git branch>` in the project that `NEON_PROJECT_ID` names, while the pull request is
-  open, and its three variables on Vercel Preview, scoped to the git branch.
-- A migrated database for each deployment whose `vercel-build` condition is true.
+- A Neon branch `preview/<git branch>` for each git branch with a preview, while the git
+  branch exists.
+- A migrated database for each deployment, before its build. Production with UAT: after the
+  sign-off, in `promote.yml`.
 
 ## Setup, once
 
-Jamie does these by hand, before the first pull request with a migration.
+The person acts are setup stubs in `.icm/intake/setup/`. Copier writes one for each act that
+the answers need. A stub is open until a session moves it to `setup/_done/` on the person's
+word (`.icm/intake/CONTEXT.md` § The setup stub). The acts of this contract:
 
-1. Neon: with UAT, two projects, production's and UAT's. Without UAT, one project.
-2. Vercel → Storage: the Neon integration connected to Production only, with preview branching
-   off. Or not connected: then set Production's `DATABASE_URL` and `DATABASE_URL_UNPOOLED` by hand.
-3. Vercel → Settings → Environment Variables: `DATABASE_URL` and `DATABASE_URL_UNPOOLED` from
-   the base on Preview, and with UAT on `uat` too. Never `MIGRATE_AT_BUILD` on Preview for all
-   branches. Keep "Enable access to System Environment Variables" on for `VERCEL_TARGET_ENV`.
-4. GitHub → Settings → Secrets and variables → Actions. Secrets: `NEON_API_KEY`,
-   `VERCEL_TOKEN`. Variables: `NEON_PROJECT_ID` (the base's project), `VERCEL_TEAM`, and
-   `VERCEL_PROJECT` when the Vercel project's name differs from the repository's.
-5. `package.json`: `db:migrate`, `db:verify`, and the `vercel-build` line above.
+1. `neon-projects`: the Neon project `<slug>`, and with UAT `uat-<slug>`.
+2. `neon-vercel-integration`: the integration on each Vercel project of the build. Preview
+   from `uat-<slug>` with UAT, or `<slug>` without, with a branch for each preview. Production
+   from `<slug>`.
+3. `uat-database` (with UAT): `DATABASE_URL` and `DATABASE_URL_UNPOOLED` of `uat-<slug>` on
+   the `uat` environment of each UAT project.
+4. `github-delete-head-branches`: GitHub deletes the head branch after a merge, so the
+   integration deletes its Neon branch.
+
+The session's own setup: `package.json` names `db:migrate` with the lock and `db:verify`, and
+the `vercel-build` line above. In a monorepo, each app's `vercel.json` has the `buildCommand`.
 
 | Name | Holds | Where |
 |---|---|---|
-| `DATABASE_URL` | the pooled connection string of the environment's database | Vercel |
-| `DATABASE_URL_UNPOOLED` | the direct connection string of the same database | Vercel |
-| `MIGRATE_AT_BUILD` | `1` on a preview that owns its own Neon branch. Set by `preview-db.sh` only | Vercel Preview, scoped to the git branch |
+| `DATABASE_URL` | the pooled connection string of the deployment's database | Vercel: Production and `uat` by the setup, Preview for each git branch by the integration |
+| `DATABASE_URL_UNPOOLED` | the direct connection string of the same database | as `DATABASE_URL` |
 | `VERCEL_TARGET_ENV` | the deployment's environment, set by Vercel at build and at runtime | Vercel, a system variable |
-| `NEON_API_KEY` | a Neon API key for the organisation | Actions secret · the shell |
-| `NEON_PROJECT_ID` | the id of the project that holds the base | Actions variable · the shell |
-| `VERCEL_TOKEN`, `VERCEL_TEAM`, `VERCEL_PROJECT` | as in `.env.example` | Actions · the shell |

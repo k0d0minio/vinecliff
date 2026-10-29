@@ -31,7 +31,7 @@ moved=""
 for dir in .icm/intake/*/; do
   [ -d "$dir" ] || continue
   epic="$(basename "$dir")"
-  case "$epic" in _done|triage) continue ;; esac
+  case "$epic" in _done|triage|setup) continue ;; esac
   [ -f "${dir}breakdown.md" ] || continue
   open="$(find "$dir" -maxdepth 1 -name '*.md' ! -name breakdown.md | wc -l)"
   [ "$open" -eq 0 ] || continue

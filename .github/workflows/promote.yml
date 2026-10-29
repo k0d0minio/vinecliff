@@ -3,9 +3,11 @@
 # <tag>` dispatches it on workflow_dispatch with the release tag, on Jamie's word, after the
 # client's sign-off is recorded and the release pull request is merged. The tag must be a `v*`
 # tag in the repository that points at a commit on main.
-# Production is migrated, then the staged production build of that commit is promoted, then
-# production is read once. Each job needs the one before it, so a failure leaves production
-# untouched. No push, merge, tag or schedule promotes.
+# Production is migrated once. Then the staged production build of that commit is promoted on each
+# UAT project: each Vercel project of the repository with the custom environment `uat`
+# (.icm/scripts/lib/vercel.sh finds them, no variable names a project). Then production is read
+# once. Each job needs the one before it, so a failure leaves production untouched. No push,
+# merge, tag or schedule promotes.
 name: promote
 
 on:
@@ -105,7 +107,7 @@ jobs:
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_TEAM: ${{ vars.VERCEL_TEAM }}
-      VERCEL_PROJECT: ${{ vars.VERCEL_PROJECT || github.event.repository.name }}
+      GH_REPO: ${{ github.repository }}
       SHA: ${{ needs.release.outputs.sha }}
       TAG: ${{ needs.release.outputs.tag }}
     steps:
@@ -113,45 +115,67 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.sha }}
           persist-credentials: false
-      - name: Promote the staged production build of the release
+      - name: Promote the staged production build of the release on each UAT project
+        # First each UAT project's build of the commit is READY, then the promotions start. ERROR
+        # or CANCELED on one project stops the run before any promotion. A project that serves
+        # the build already is skipped, so a re-run promotes only the projects that are not
+        # current yet.
         run: |
           # shellcheck source=/dev/null
           source .icm/scripts/lib/vercel.sh
           vercel_require "promoting $TAG"
+          projects="$(vercel_uat_projects)"
+          [ -n "$projects" ] || die "no Vercel project of $GH_REPO has the custom environment '${UAT_ENVIRONMENT:-uat}': nothing to promote, production untouched"
+          echo "UAT projects: $(cut -f2 <<<"$projects" | paste -sd ' ')"
+          declare -A ids=()
           deadline=$((SECONDS + 900))
           while :; do
-            dep="$(vercel_deployment production "$SHA")"
-            state="$(printf '%s' "$dep" | jq -r '.state // .readyState // empty')"
-            case "$state" in
-              READY) break ;;
-              ERROR|CANCELED) die "the production build of ${SHA:0:7} is $state: nothing to promote, production untouched" ;;
-            esac
-            [ "$SECONDS" -lt "$deadline" ] || die "no READY production build of ${SHA:0:7} after fifteen minutes (${state:-none}): is Auto-assign off, and did the merge build? Production untouched"
-            echo "production build of ${SHA:0:7}: ${state:-not found yet}. Waiting."
+            waiting=""
+            while IFS=$'\t' read -r pid pname; do
+              [ -z "${ids[$pid]:-}" ] || continue
+              vercel_use "$pid" "$pname"
+              dep="$(vercel_deployment production "$SHA")"
+              state="$(printf '%s' "$dep" | jq -r '.state // .readyState // empty')"
+              case "$state" in
+                READY) ids[$pid]="$(printf '%s' "$dep" | jq -r '.uid // .id')" ;;
+                ERROR|CANCELED) die "$pname: the production build of ${SHA:0:7} is $state: nothing is promoted, production untouched" ;;
+                *) waiting+=" $pname (${state:-not found yet})" ;;
+              esac
+            done <<<"$projects"
+            [ -n "$waiting" ] || break
+            [ "$SECONDS" -lt "$deadline" ] || die "no READY production build of ${SHA:0:7} after fifteen minutes on:$waiting. Is Auto-assign off, and did the merge build? Production untouched"
+            echo "production build of ${SHA:0:7} not READY on:$waiting. Waiting."
             sleep 20
           done
-          id="$(printf '%s' "$dep" | jq -r '.uid // .id')"
-          if [ "$(vercel_production_current)" = "$id" ]; then
-            echo "$id is current already: nothing to promote"
-            exit 0
-          fi
-          code="$(vercel_promote "$id")"
-          case "$code" in
-            2??) echo "promote requested for $id (HTTP $code)" ;;
-            *) die "POST promote answered HTTP $code: production unchanged" ;;
-          esac
-          for _ in $(seq 1 60); do
-            [ "$(vercel_production_current)" = "$id" ] && break
-            sleep 10
-          done
-          [ "$(vercel_production_current)" = "$id" ] || die "$id is not current after ten minutes: read the project in Vercel"
-          echo "$TAG is current: $id"
+          while IFS=$'\t' read -r pid pname; do
+            vercel_use "$pid" "$pname"
+            id="${ids[$pid]}"
+            if [ "$(vercel_production_current)" = "$id" ]; then
+              echo "$pname: $id is current already: nothing to promote"
+              continue
+            fi
+            code="$(vercel_promote "$id")"
+            case "$code" in
+              2??) echo "$pname: promote requested for $id (HTTP $code)" ;;
+              *) die "$pname: POST promote answered HTTP $code: $pname unchanged. Re-run the workflow: it skips each project that is current" ;;
+            esac
+            for _ in $(seq 1 60); do
+              [ "$(vercel_production_current)" = "$id" ] && break
+              sleep 10
+            done
+            [ "$(vercel_production_current)" = "$id" ] || die "$pname: $id is not current after ten minutes: read the project in Vercel"
+            echo "$pname: $TAG is current: $id"
+          done <<<"$projects"
       - name: Read production once
         run: |
           # shellcheck source=/dev/null
           source .icm/scripts/lib/vercel.sh
-          while IFS= read -r d; do
-            [ -n "$d" ] || continue
-            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$d/" || echo 000)"
-            echo "https://$d/ answered HTTP $code"
-          done < <(vercel_production_domains)
+          projects="$(vercel_uat_projects)"
+          while IFS=$'\t' read -r pid pname; do
+            vercel_use "$pid" "$pname"
+            while IFS= read -r d; do
+              [ -n "$d" ] || continue
+              code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$d/" || echo 000)"
+              echo "$pname: https://$d/ answered HTTP $code"
+            done < <(vercel_production_domains)
+          done <<<"$projects"

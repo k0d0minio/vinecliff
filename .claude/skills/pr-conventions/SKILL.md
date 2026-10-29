@@ -14,9 +14,9 @@ Every GitHub call is REST: `gh api`, `gh run` or `gh workflow run`. Never `gh pr
 
 ## Branches
 
-- A ticket's branch is `<slug>` or `triage/<slug>`. `.icm/scripts/new-run.sh` cuts it. Do not
-  cut a ticket branch by hand (why: the script also moves the stub and opens the pull request ·
-  2026-10-27).
+- A ticket's branch is `<slug>` or `triage/<slug>`. `.icm/scripts/new-run.sh` cuts it on
+  `main`, or keeps the branch of the worktree it runs in. Do not cut a ticket branch by hand
+  (why: the script also moves the stub and opens the pull request · 2026-10-27).
 - `main` changes by pull request only. Do not commit to `main`. Do not push to `main`.
 - Do not rewrite the history of a pushed branch. Do not force push. A wrong commit gets a new
   commit that fixes it.

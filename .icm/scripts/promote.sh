@@ -6,27 +6,32 @@
 #        .icm/scripts/promote.sh run --tag <tag>
 #
 #   status   the last release tag, the batch since it (git log <tag>..origin/main), the open
-#            release pull request, `ci` on main's head, the UAT deployment of that head, the
-#            staged production build of it, the setup acts this script can read, and the
-#            `promote.sh run` command when the last release tag is not promoted yet. Reads only.
+#            release pull request, `ci` on main's head, and for each UAT project the UAT
+#            deployment of that head, the staged production build of it and the setup acts this
+#            script can read. Then the `promote.sh run` command when the last release tag is not
+#            promoted on each UAT project yet. Reads only.
 #   approve  THE RECORD OF THE CLIENT'S WORD. Jamie, in this session, says the client approved
 #            and names who. The script posts the record on the open release pull request, names
-#            the batch and the UAT deployment, and stops. It refuses without --by, without an
-#            open release pull request, and when the UAT deployment of main's head is not READY.
+#            the batch and the UAT deployment of each UAT project, and stops. It refuses without
+#            --by, without an open release pull request, and when a UAT deployment of main's head
+#            is not READY.
 #            It ticks nothing, merges nothing and dispatches nothing. On Jamie's word `release`,
 #            the session runs release.sh. On Jamie's word `promote`, the session runs `run`.
 #   run      THE DISPATCH OF promote.yml. Jamie, in this session, says `promote`. The script reads
 #            the merged release pull request of <tag> and the tag's commit. It refuses when the
 #            pull request has no record from `approve`, when the record's commit is not the parent
 #            of the release commit (a merge joined the batch after the sign-off), when main is
-#            ahead of the tag, or when `ci`, the UAT deployment or the staged production build of
-#            the tag's commit is not READY. Then `gh workflow run promote.yml -f tag=<tag>`, and it
+#            ahead of the tag, or when `ci`, a UAT deployment or a staged production build of the
+#            tag's commit is not READY on a UAT project. Then `gh workflow run promote.yml -f tag=<tag>`, and it
 #            prints the run's URL. It does not wait for the run to finish.
 #
-# Reads: gh (signed in), git, jq, curl, VERCEL_TOKEN, and VERCEL_TEAM, VERCEL_PROJECT,
-# UAT_ENVIRONMENT when set. Without VERCEL_TOKEN, status prints what git and GitHub know, and
-# approve and run refuse. The GitHub reads and the record use the REST API only, through
+# The UAT projects are the Vercel projects of the repository with the custom environment `uat`.
+# lib/vercel.sh finds them: no variable names a project. A project without `uat` follows main.
+# Reads: gh (signed in), git, jq, curl, VERCEL_TOKEN, and VERCEL_TEAM, UAT_ENVIRONMENT when set.
+# Without VERCEL_TOKEN, status prints what git and GitHub know, and approve and run refuse. The GitHub reads and the record use the REST API only, through
 # lib/github.sh, which says why. The contract is .icm/uat/CONTEXT.md.
+# The addresses, the Vercel projects and the databases that a person reads are in
+# .icm/environments.md. This script reads Vercel and git, never that file.
 # Exit: 0 reported, recorded or dispatched · 1 an error · 3 a refusal, named on stderr, RESULT: STOP.
 set -euo pipefail
 
@@ -44,7 +49,7 @@ while [ $# -gt 0 ]; do
     --by) by="${2:-}"; shift 2 ;;
     --note) note="${2:-}"; shift 2 ;;
     --tag) tag="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) die "unknown argument: $1 (usage: promote.sh [status] | approve --by \"<who>\" [--note \"<text>\"] | run --tag <tag>)" ;;
   esac
 done
@@ -110,12 +115,17 @@ if [ "$verb" = run ]; then
     --jq 'first | if . == null then "" else "\(.status) \(.conclusion // "")" end')"
   [ "$rci" = "completed success" ] || stop "ci on $tshort is ${rci:-not found}, not success"
   slug="${UAT_ENVIRONMENT:-uat}"
-  udep="$(vercel_deployment "$slug" "$sha")"
-  ustate="$(printf '%s' "$udep" | jq -r '.state // .readyState // empty' 2>/dev/null || true)"
-  [ "$ustate" = READY ] || stop "the '$slug' deployment of $tshort is ${ustate:-missing}, not READY"
-  pdep="$(vercel_deployment production "$sha")"
-  pstate="$(printf '%s' "$pdep" | jq -r '.state // .readyState // empty' 2>/dev/null || true)"
-  [ "$pstate" = READY ] || stop "the staged production build of $tshort is ${pstate:-missing}, not READY"
+  projects="$(vercel_uat_projects)"
+  [ -n "$projects" ] || stop "no Vercel project of $repo has the custom environment '$slug' (Setup step 1)"
+  while IFS=$'\t' read -r pid pname; do
+    vercel_use "$pid" "$pname"
+    udep="$(vercel_deployment "$slug" "$sha")"
+    ustate="$(printf '%s' "$udep" | jq -r '.state // .readyState // empty' 2>/dev/null || true)"
+    [ "$ustate" = READY ] || stop "$pname: the '$slug' deployment of $tshort is ${ustate:-missing}, not READY"
+    pdep="$(vercel_deployment production "$sha")"
+    pstate="$(printf '%s' "$pdep" | jq -r '.state // .readyState // empty' 2>/dev/null || true)"
+    [ "$pstate" = READY ] || stop "$pname: the staged production build of $tshort is ${pstate:-missing}, not READY"
+  done <<<"$projects"
 
   # The dispatch, then one read of the run's URL: a run newer than the newest run before it.
   before="$(gh run list --workflow promote.yml --limit 1 --json databaseId --jq 'first.databaseId // 0')"
@@ -147,58 +157,93 @@ ci="$(gh run list --workflow ci --branch main --commit "$head" --limit 1 --json 
   --jq 'first | "\(.status)\(if .conclusion then " " + .conclusion else "" end)"' 2>/dev/null || true)"
 [ -n "$ci" ] || ci="no run found for $short"
 
-# --- Vercel: the environment, UAT, the staged build, the setup acts -------------------------------
-uat_state="not read"; prod_state="not read"; prod_line="VERCEL_TOKEN is not set: UAT and production were not read"
-uat_line="$prod_line"; setup_lines=""; uat_id=""; uat_domain=""
+# --- Vercel: per UAT project, the environment, UAT, the staged build, the setup acts ---------------
+# The aggregate states: READY when each UAT project is READY, else the first state that is not.
+# prod_state is current when each project serves main's head already.
+uat_state="not read"; prod_state="not read"; none="VERCEL_TOKEN is not set: UAT and production were not read"
+uat_lines=""; prod_lines=""; setup_lines=""; record_lines=""; promote_line=""; projects=""
 if [ -n "${VERCEL_TOKEN:-}" ]; then
   vercel_require "reading UAT and production"
-  env="$(vercel_custom_env)"
   slug="${UAT_ENVIRONMENT:-uat}"
-  if [ -n "$env" ]; then
+  all="$(vercel_projects)"
+  projects="$(vercel_uat_projects)"
+  if [ -z "$all" ]; then
+    setup_lines="  [TODO] no Vercel project in the team is linked to $repo (Setup step 1)"$'\n'
+  elif [ -z "$projects" ]; then
+    setup_lines="  [TODO] no Vercel project of $repo has the custom environment '$slug' (Setup step 1)"$'\n'
+  fi
+  while IFS=$'\t' read -r pid pname; do
+    [ -n "$pid" ] || continue
+    case $'\n'"$projects"$'\n' in
+      *$'\n'"$pid"$'\t'*) ;;
+      *) setup_lines+="  [--]   $pname: no custom environment '$slug', so it follows main"$'\n' ;;
+    esac
+  done <<<"$all"
+  if [ -n "$projects" ]; then uat_state=READY; prod_state=current; fi
+  tag_sha=""; [ -z "$last_tag" ] || tag_sha="$(git rev-parse "${last_tag}^{commit}")"
+  waiting=()
+  while IFS=$'\t' read -r pid pname; do
+    [ -n "$pid" ] || continue
+    vercel_use "$pid" "$pname"
+    env="$(vercel_custom_env)"
     uat_domain="$(printf '%s' "$env" | jq -r '[.domains[]?.name] | first // empty')"
     matcher="$(printf '%s' "$env" | jq -r '"\(.branchMatcher.type // "?") \(.branchMatcher.pattern // "?")"')"
-    setup_lines="  [OK]   custom environment '$slug' on $(vercel_project_name), tracking: $matcher"$'\n'
-    if [ -n "$uat_domain" ]; then setup_lines+="  [OK]   domain attached: $uat_domain"$'\n'; else setup_lines+="  [TODO] no domain attached to '$slug' (Setup step 1)"$'\n'; fi
+    setup_lines+="  [OK]   $pname: custom environment '$slug', tracking: $matcher"$'\n'
+    if [ -n "$uat_domain" ]; then setup_lines+="  [OK]   $pname: domain attached: $uat_domain"$'\n'; else setup_lines+="  [TODO] $pname: no domain attached to '$slug' (Setup step 1)"$'\n'; fi
     dep="$(vercel_deployment "$slug" "$head")"
     if [ -n "$dep" ]; then
-      uat_state="$(printf '%s' "$dep" | jq -r '.state // .readyState')"
+      state="$(printf '%s' "$dep" | jq -r '.state // .readyState')"
       uat_id="$(printf '%s' "$dep" | jq -r '.uid // .id')"
-      uat_line="$uat_state on $short · $uat_id${uat_domain:+ · https://$uat_domain}"
+      uat_lines+="  $pname: $state on $short · $uat_id${uat_domain:+ · https://$uat_domain}"$'\n'
+      record_lines+="- uat, $pname: ${uat_domain:+https://$uat_domain · }deployment ${uat_id} of ${short}"$'\n'
     else
-      uat_line="no '$slug' deployment of $short yet"
+      state=missing
+      uat_lines+="  $pname: no '$slug' deployment of $short yet"$'\n'
     fi
-  else
-    setup_lines="  [TODO] no custom environment '$slug' on $(vercel_project_name) (Setup step 1)"$'\n'
-    uat_line="no custom environment '$slug'"
-  fi
-  project="$(vercel_project)"
-  auto="$(printf '%s' "$project" | jq -r 'if has("autoAssignCustomDomains") then (.autoAssignCustomDomains | tostring) else "unknown" end')"
-  case "$auto" in
-    false) setup_lines+="  [OK]   Auto-assign Custom Production Domains is off"$'\n' ;;
-    true) setup_lines+="  [TODO] Auto-assign Custom Production Domains is on: every merge would ship (Setup step 2)"$'\n' ;;
-    *) setup_lines+="  [?]    Auto-assign Custom Production Domains: not in the project read; check Settings → Environments → Production"$'\n' ;;
-  esac
-  current="$(printf '%s' "$project" | jq -r '.targets.production.id // empty')"
-  pdep="$(vercel_deployment production "$head")"
-  if [ -n "$pdep" ]; then
-    prod_state="$(printf '%s' "$pdep" | jq -r '.state // .readyState')"
-    pid="$(printf '%s' "$pdep" | jq -r '.uid // .id')"
-    if [ "$pid" = "$current" ]; then prod_line="current: $short is promoted ($pid)"; prod_state="current"
-    else prod_line="staged $prod_state on $short ($pid); production serves ${current:-nothing}"; fi
-  else
-    prod_line="no production build of $short yet; production serves ${current:-nothing}"
-  fi
-  if [ -n "$last_tag" ]; then
-    tag_sha="$(git rev-parse "${last_tag}^{commit}")"
-    tdep="$(vercel_deployment production "$tag_sha")"
-    tid="$(printf '%s' "$tdep" | jq -r '.uid // .id // empty' 2>/dev/null || true)"
-    if [ -n "$tid" ] && [ "$tid" = "$current" ]; then
-      promote_line="$last_tag is promoted ($tid)"
+    [ "$uat_state" != READY ] || [ "$state" = READY ] || uat_state="$state"
+    project="$(vercel_project)"
+    auto="$(printf '%s' "$project" | jq -r 'if has("autoAssignCustomDomains") then (.autoAssignCustomDomains | tostring) else "unknown" end')"
+    case "$auto" in
+      false) setup_lines+="  [OK]   $pname: Auto-assign Custom Production Domains is off"$'\n' ;;
+      true) setup_lines+="  [TODO] $pname: Auto-assign Custom Production Domains is on: every merge would ship (Setup step 2)"$'\n' ;;
+      *) setup_lines+="  [?]    $pname: Auto-assign Custom Production Domains: not in the project read; check Settings → Environments → Production"$'\n' ;;
+    esac
+    current="$(printf '%s' "$project" | jq -r '.targets.production.id // empty')"
+    pdep="$(vercel_deployment production "$head")"
+    if [ -n "$pdep" ]; then
+      state="$(printf '%s' "$pdep" | jq -r '.state // .readyState')"
+      pid_dep="$(printf '%s' "$pdep" | jq -r '.uid // .id')"
+      if [ "$pid_dep" = "$current" ]; then prod_lines+="  $pname: current: $short is promoted ($pid_dep)"$'\n'; state=current
+      else prod_lines+="  $pname: staged $state on $short ($pid_dep); production serves ${current:-nothing}"$'\n'; fi
     else
-      promote_line="$last_tag is not promoted. On Jamie's word promote: .icm/scripts/promote.sh run --tag $last_tag"
+      state=missing
+      prod_lines+="  $pname: no production build of $short yet; production serves ${current:-nothing}"$'\n'
+    fi
+    case "$prod_state:$state" in
+      current:current) ;;
+      current:READY) prod_state=READY ;;
+      READY:current|READY:READY) ;;
+      current:*|READY:*) prod_state="$state" ;;
+    esac
+    if [ -n "$tag_sha" ]; then
+      tid="$(vercel_deployment production "$tag_sha" | jq -r '.uid // .id // empty' 2>/dev/null || true)"
+      [ -n "$tid" ] && [ "$tid" = "$current" ] || waiting+=("$pname")
+    fi
+  done <<<"$projects"
+  if [ -n "$last_tag" ] && [ -n "$projects" ]; then
+    if [ "${#waiting[@]}" -eq 0 ]; then
+      promote_line="$last_tag is promoted on each UAT project"
+    else
+      promote_line="$last_tag is not promoted on ${waiting[*]}. On Jamie's word promote: .icm/scripts/promote.sh run --tag $last_tag"
     fi
   fi
 fi
+if [ -n "${VERCEL_TOKEN:-}" ] && [ -z "$projects" ]; then
+  uat_state=missing; prod_state=missing
+  none="no UAT project: UAT and production were not read"
+fi
+[ -n "$uat_lines" ] || uat_lines="  ${none}"$'\n'
+[ -n "$prod_lines" ] || prod_lines="  ${none}"$'\n'
 
 # --- status ----------------------------------------------------------------------------------------
 echo "release:    ${last_tag:-none yet}$( [ -n "$last_tag" ] && echo " at $(git rev-parse --short "$last_tag")")"
@@ -207,9 +252,9 @@ echo "batch:      $n commit(s) on main since ${last_tag:-the first commit}"
 [ "$n" -le 20 ] || echo "  … $((n - 20)) more"
 if [ -n "$pr_number" ]; then echo "release PR: #$pr_number $pr_url"; else echo "release PR: none open (nothing merged since the last release, or release-please has not run on main yet)"; fi
 echo "ci on main: $ci ($short)"
-echo "uat:        $uat_line"
-echo "production: $prod_line"
-[ -z "${promote_line:-}" ] || echo "promote:    $promote_line"
+echo "uat:"; printf '%s' "$uat_lines"
+echo "production:"; printf '%s' "$prod_lines"
+[ -z "$promote_line" ] || echo "promote:    $promote_line"
 if [ -n "$setup_lines" ]; then echo "setup:"; printf '%s' "$setup_lines"; fi
 
 if [ "$verb" = status ]; then
@@ -221,8 +266,8 @@ fi
 [ -n "$by" ] || die "approve needs --by \"<who said yes>\""
 [ -n "${VERCEL_TOKEN:-}" ] || stop "VERCEL_TOKEN is not set: the UAT deployment cannot be read, so the record cannot name what the client tested"
 [ -n "$pr_number" ] || stop "no release pull request is open: nothing to promote. A merge to main makes release-please open one"
-[ "$uat_state" = READY ] || stop "the UAT deployment of $short is ${uat_state}: the client cannot have tested this batch"
-[ "$prod_state" = READY ] || [ "$prod_state" = current ] || echo "note: the production build of $short is ${prod_state}. promote.yml waits for it, fifteen minutes at most."
+[ "$uat_state" = READY ] || stop "a UAT deployment of $short is ${uat_state}: the client cannot have tested this batch"
+[ "$prod_state" = READY ] || [ "$prod_state" = current ] || echo "note: a production build of $short is ${prod_state}. promote.yml waits for each one, fifteen minutes at most."
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
@@ -230,7 +275,7 @@ trap 'rm -f "$tmp"' EXIT
   echo "**UAT sign-off** — ${by} approved the batch on $(date -u +%Y-%m-%d)${note:+: ${note}}"
   echo
   echo "- batch: \`${last_tag:-start}..${short}\`, ${n} commit(s)"
-  echo "- uat: ${uat_domain:+https://$uat_domain · }deployment ${uat_id} of ${short}"
+  printf '%s' "$record_lines"
   echo "- recorded by \`.icm/scripts/promote.sh approve\`"
   echo
   echo "On Jamie's word \`release\`, the session merges this pull request with \`.icm/scripts/release.sh\`. On Jamie's word \`promote\`, the session runs \`.icm/scripts/promote.sh run --tag <tag>\`. Merge nothing else before it."
@@ -239,5 +284,5 @@ gh api -X POST "repos/${repo}/issues/${pr_number}/comments" -F body=@"$tmp" >/de
 echo "recorded on $pr_url"
 echo "next: on Jamie's word release: .icm/scripts/release.sh"
 echo "      then on Jamie's word promote: .icm/scripts/promote.sh run --tag v${pr_version:-<version>}"
-echo "      promote.yml then migrates production and promotes the staged build of the release commit."
+echo "      promote.yml then migrates production and promotes the staged build of the release commit on each UAT project."
 echo "RESULT: RECORDED $pr_url"
