@@ -5,5 +5,5 @@
 - link: https://linear.app/jamienisbet/issue/JAM-276/vinecliff-project-rulesmd-names-the-stack-the-conventions-and-the-docs
 - branch: contact/jam-276-vinecliff-project-rulesmd-names-the-stack
 - lane: chore
-- pr: pending
+- pr: #41
 - started: 2026-11-18
