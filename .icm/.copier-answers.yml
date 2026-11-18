@@ -1,0 +1,13 @@
+# Copier writes this file. Do not edit it. blueprint/bin/update-repo.sh reads it.
+code_ci: node
+database: none
+default_branch: main
+language: en
+linear_org: kodominio
+linear_states: false
+linear_team_key: JAM
+linear_writes: false
+release_config: false
+slug: vinecliff
+ticket_source: linear
+uat: true

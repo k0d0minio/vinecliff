@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "bash .icm/scripts/vercel-build.sh next build",
+    "vercel-build": "bash .icm/local/vercel-build.sh next build",
     "start": "next start",
     "test": "tsx --test tests/*.test.ts",
     "db:generate": "drizzle-kit generate",

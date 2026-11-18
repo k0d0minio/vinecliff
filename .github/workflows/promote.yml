@@ -1,181 +1,61 @@
-# promote: the promotion to production (CI is truth; never run locally). The contract is
-# .icm/uat/CONTEXT.md. Nothing starts this workflow but promote.sh run: `promote.sh run --tag
-# <tag>` dispatches it on workflow_dispatch with the release tag, on Jamie's word, after the
-# client's sign-off is recorded and the release pull request is merged. The tag must be a `v*`
-# tag in the repository that points at a commit on main.
-# Production is migrated once. Then the staged production build of that commit is promoted on each
-# UAT project: each Vercel project of the repository with the custom environment `uat`
-# (.icm/scripts/lib/vercel.sh finds them, no variable names a project). Then production is read
-# once. Each job needs the one before it, so a failure leaves production untouched. No push,
-# merge, tag or schedule promotes.
+# The blueprint owns this file. An update of the blueprint replaces it: do not edit it.
+# The promotion to production. Only `.icm/_system/scripts/promote.sh run --tag <v*>` starts
+# it, on the operator's word. The contract is .icm/_system/features/uat.md.
+# Order: each production build of the tag is READY, then each
+# UAT project is promoted. A fault stops the run before production changes.
 name: promote
-
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: The release tag to promote (v*), made by the merge of the release pull request
+        description: The release tag (v*) to promote
         required: true
         type: string
-
 permissions:
   contents: read
-
 concurrency:
   group: promote
   cancel-in-progress: false
-
 defaults:
   run:
     shell: bash
+# The Node version is the one of .nvmrc. A repo with no .nvmrc gets this one.
+env:
+  NODE_DEFAULT: "22"
 
 jobs:
-  release:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     env:
       TAG: ${{ inputs.tag }}
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
-      sha: ${{ steps.tag.outputs.sha }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM: ${{ vars.VERCEL_TEAM }}
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: The tag is a release on main
-        id: tag
-        run: |
-          case "$TAG" in
-            v*) ;;
-            *) echo "::error::'$TAG' is not a release tag (v*): nothing is promoted"; exit 1 ;;
-          esac
-          sha="$(git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}" || true)"
-          [ -n "$sha" ] || { echo "::error::tag $TAG is not in the repository: nothing is promoted"; exit 1; }
-          git merge-base --is-ancestor "$sha" origin/main \
-            || { echo "::error::tag $TAG (${sha:0:7}) is not on main: nothing is promoted"; exit 1; }
-          echo "release $TAG at ${sha:0:7}: migrate production, then promote"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - run: bash .icm/_system/scripts/promote.sh verify --tag "$TAG"
 
-  migrate:
-    # db:migrate, then db:verify, against production, on any database. A repository without the
-    # scripts skips them (--if-present). With db:migrate, a missing DATABASE_URL fails here,
-    # before anything is promoted.
-    needs: release
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    concurrency:
-      group: migrate-production
-      cancel-in-progress: false
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.release.outputs.sha }}
-          persist-credentials: false
-      - name: The connection string is set when the build migrates
-        run: |
-          if [ ! -f package.json ] || ! jq -e '.scripts["db:migrate"]' package.json >/dev/null; then
-            echo "package.json names no db:migrate: production is not migrated here"
-            exit 0
-          fi
-          [ -n "$DATABASE_URL" ] || { echo "::error::the repository secret DATABASE_URL is not set: production cannot be migrated, nothing is promoted"; exit 1; }
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: hashFiles('package.json') != ''
-        with:
-          node-version: 22
-      - name: Migrate production, then verify
-        if: hashFiles('package.json') != ''
-        run: |
-          if [ -f pnpm-lock.yaml ]; then
-            corepack enable
-            pnpm install --frozen-lockfile
-            run() { pnpm run --if-present "$1"; }
-          else
-            npm ci
-            run() { npm run --if-present "$1"; }
-          fi
-          run db:migrate
-          run db:verify
 
   promote:
-    needs: [release, migrate]
+    needs: [verify]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      TAG: ${{ inputs.tag }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_TEAM: ${{ vars.VERCEL_TEAM }}
       GH_REPO: ${{ github.repository }}
-      SHA: ${{ needs.release.outputs.sha }}
-      TAG: ${{ needs.release.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release.outputs.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - name: Promote the staged production build of the release on each UAT project
-        # First each UAT project's build of the commit is READY, then the promotions start. ERROR
-        # or CANCELED on one project stops the run before any promotion. A project that serves
-        # the build already is skipped, so a re-run promotes only the projects that are not
-        # current yet.
-        run: |
-          # shellcheck source=/dev/null
-          source .icm/scripts/lib/vercel.sh
-          vercel_require "promoting $TAG"
-          projects="$(vercel_uat_projects)"
-          [ -n "$projects" ] || die "no Vercel project of $GH_REPO has the custom environment '${UAT_ENVIRONMENT:-uat}': nothing to promote, production untouched"
-          echo "UAT projects: $(cut -f2 <<<"$projects" | paste -sd ' ')"
-          declare -A ids=()
-          deadline=$((SECONDS + 900))
-          while :; do
-            waiting=""
-            while IFS=$'\t' read -r pid pname; do
-              [ -z "${ids[$pid]:-}" ] || continue
-              vercel_use "$pid" "$pname"
-              dep="$(vercel_deployment production "$SHA")"
-              state="$(printf '%s' "$dep" | jq -r '.state // .readyState // empty')"
-              case "$state" in
-                READY) ids[$pid]="$(printf '%s' "$dep" | jq -r '.uid // .id')" ;;
-                ERROR|CANCELED) die "$pname: the production build of ${SHA:0:7} is $state: nothing is promoted, production untouched" ;;
-                *) waiting+=" $pname (${state:-not found yet})" ;;
-              esac
-            done <<<"$projects"
-            [ -n "$waiting" ] || break
-            [ "$SECONDS" -lt "$deadline" ] || die "no READY production build of ${SHA:0:7} after fifteen minutes on:$waiting. Is Auto-assign off, and did the merge build? Production untouched"
-            echo "production build of ${SHA:0:7} not READY on:$waiting. Waiting."
-            sleep 20
-          done
-          while IFS=$'\t' read -r pid pname; do
-            vercel_use "$pid" "$pname"
-            id="${ids[$pid]}"
-            if [ "$(vercel_production_current)" = "$id" ]; then
-              echo "$pname: $id is current already: nothing to promote"
-              continue
-            fi
-            code="$(vercel_promote "$id")"
-            case "$code" in
-              2??) echo "$pname: promote requested for $id (HTTP $code)" ;;
-              *) die "$pname: POST promote answered HTTP $code: $pname unchanged. Re-run the workflow: it skips each project that is current" ;;
-            esac
-            for _ in $(seq 1 60); do
-              [ "$(vercel_production_current)" = "$id" ] && break
-              sleep 10
-            done
-            [ "$(vercel_production_current)" = "$id" ] || die "$pname: $id is not current after ten minutes: read the project in Vercel"
-            echo "$pname: $TAG is current: $id"
-          done <<<"$projects"
-      - name: Read production once
-        run: |
-          # shellcheck source=/dev/null
-          source .icm/scripts/lib/vercel.sh
-          projects="$(vercel_uat_projects)"
-          while IFS=$'\t' read -r pid pname; do
-            vercel_use "$pid" "$pname"
-            while IFS= read -r d; do
-              [ -n "$d" ] || continue
-              code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$d/" || echo 000)"
-              echo "$pname: https://$d/ answered HTTP $code"
-            done < <(vercel_production_domains)
-          done <<<"$projects"
+      - run: bash .icm/_system/scripts/promote.sh ship --tag "$TAG"
+

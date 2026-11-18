@@ -1,28 +1,97 @@
-# ci: the client checks and the release, defined once in legible-consulting/.github (CI is
-# truth; never run locally).
+# The blueprint owns this file. An update of the blueprint replaces it: do not edit it.
+# The steps of the job code are in .icm/_system/ci/code.sh.
+# CI is the source of truth: these checks do not run on a computer of a person.
 name: ci
-
 on:
   push:
     branches: [main]
   pull_request:
-
+    # A draft runs no job: the checks start when the pull request is ready.
+    types: [opened, synchronize, reopened, ready_for_review]
 permissions:
   contents: read
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+# The Node version is the one of .nvmrc. A repo with no .nvmrc gets this one.
+env:
+  NODE_DEFAULT: "22"
 
 jobs:
-  check:
-    uses: legible-consulting/.github/.github/workflows/check-client.yml@main
+  secrets:
+    # gitleaks reads the full history. It is the binary, not the action: the action needs a
+    # licence for an organisation.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${f}"
+          echo "${GITLEAKS_SHA256}  ${f}" | sha256sum -c -
+          tar -xzf "${f}" gitleaks
+      - name: Scan the full history
+        run: ./gitleaks git --redact --no-banner -v .
+
+  workflows:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install actionlint
+        run: |
+          f="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${f}"
+          echo "${ACTIONLINT_SHA256}  ${f}" | sha256sum -c -
+          tar -xzf "${f}" actionlint
+      - name: actionlint
+        run: ./actionlint -color
+
+  code:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    concurrency:
+      group: code-${{ github.ref }}
+      cancel-in-progress: true
+
+    env:
+      BASE_REF: ${{ github.base_ref }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: hashFiles('package.json') != ''
+        with:
+          node-version-file: ${{ hashFiles('.nvmrc') != '' && '.nvmrc' || '' }}
+          node-version: ${{ hashFiles('.nvmrc') == '' && env.NODE_DEFAULT || '' }}
+      - run: bash .icm/_system/ci/code.sh
+
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # release-please keeps one release pull request open: the batch since the last release.
+    # Its merge makes the tag v* and the changelog. It moves nothing to production.
+    if: github.event_name == 'push'
+    needs: code
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    uses: legible-consulting/.github/.github/workflows/release.yml@main
-    secrets:
-      token: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          release-type: node
