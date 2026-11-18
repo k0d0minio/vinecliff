@@ -41,10 +41,15 @@ and a preview build migrates production. The repo has no UAT database and no UAT
    `production`, it only builds. For each other target it runs `db:migrate`, then `db:verify`,
    then the build. It gives the two scripts `DATABASE_URL_UNPOOLED` as `DATABASE_URL` when
    that name has a value. Without `VERCEL_TARGET_ENV` or without `DATABASE_URL`, it stops.
-4. `db:migrate` holds no lock. Two runs on one database at the same time are possible.
-5. A migration runs while the deployment of before still serves. A migration must work with
+4. The workflow `promote` of the blueprint does not migrate (the answer `database: none`).
+   The `promote.yml` of before had a job that ran `db:migrate` and `db:verify` on production
+   before a promotion. That job left on 2026-11-18. It never ran: the repo has no release
+   tag. Production is at the schema of `main` before a promotion, because `db-migrate.yml`
+   runs at each push to `main`. Nothing runs `db:verify` on production now.
+5. `db:migrate` holds no lock. Two runs on one database at the same time are possible.
+6. A migration runs while the deployment of before still serves. A migration must work with
    the code that it replaces.
-6. Do not run a migration on a computer against a shared database.
+7. Do not run a migration on a computer against a shared database.
 
 ## Outputs
 

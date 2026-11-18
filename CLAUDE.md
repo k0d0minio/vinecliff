@@ -31,7 +31,7 @@ job `release` keeps the release-please pull request open on `main`, and that pul
 the batch. A merge to `main` reaches UAT. Production moves on a promotion, as
 `.icm/_system/features/uat.md` says. The database model of the blueprint is not adopted
 (`.icm/local/database.md`): `db-migrate.yml` migrates production at each push to `main`, and
-a preview build migrates its database. The setup acts of `.icm/setup/` are not done on
+a preview build migrates its database. The workflow `promote` does not migrate. The setup acts of `.icm/setup/` are not done on
 2026-11-18: until a person does them, the repo has no UAT environment, and a merge to `main`
 deploys production as before.
 
