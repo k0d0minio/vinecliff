@@ -1,0 +1,10 @@
+{
+  "slug": "vinecliff",
+  "language": "en",
+  "ticket_source": "linear",
+  "default_branch": "main",
+  "linear": {
+    "team_key": "JAM",
+    "org": "kodominio"
+  }
+}

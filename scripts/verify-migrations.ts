@@ -1,6 +1,6 @@
 // Refuses to call a migration run done while any journal entry is not in the
 // database. Runs after `npm run db:migrate`: in the build's vercel-build
-// (.icm/scripts/vercel-build.sh) and in promote.yml.
+// (.icm/local/vercel-build.sh).
 //
 //   DATABASE_URL="postgres://..." npm run db:verify
 //

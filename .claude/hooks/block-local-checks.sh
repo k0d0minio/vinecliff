@@ -12,7 +12,7 @@
 #   • format / lint / typecheck               → CI's advisory quality job
 #   • dev / start / preview servers           → hang the session; not the agent's job
 #   • Playwright / e2e / unit test runners    → run in CI, not ad-hoc here
-# ALLOWED: the ICM pipeline's own scripts (.icm/scripts/*.sh — format.sh, lint.sh,
+# ALLOWED: the ICM pipeline's own scripts (.icm/_system/scripts/*.sh — format.sh, lint.sh,
 # validate-*.sh, project-labels.sh, setup.sh, and the rest) are the factory's tooling, not
 # the target app's checks — running them in-session is the point.
 # Commit and push, then read the target app's results from the PR's check runs and the
@@ -81,7 +81,7 @@ local checks, dev/preview servers, or e2e/browser tests unless you are explicitl
   • format / lint / typecheck            → CI's advisory quality job
   • dev / start / preview servers        → they hang the session; not the agent's job
   • Playwright / e2e / unit tests        → run in CI, not ad-hoc here
-The ICM pipeline's own scripts (.icm/scripts/*.sh) are unaffected by this guard — they are
+The ICM pipeline's own scripts (.icm/_system/scripts/*.sh) are unaffected by this guard — they are
 the factory's tooling, not the target app's checks.
 Commit and push, then read results from the PR's check runs and the preview deploy.
 If you must run one locally, ask the user to run it (or to lift this guard for that command).

@@ -1,0 +1,3 @@
+# The files of this folder belong to the blueprint. An ignore rule of the repo, for
+# example build/ or lib/, does not apply below this folder.
+!*

@@ -17,7 +17,7 @@
 #                              (gh api -X PUT …/merge, gh api -X POST …/merges); the house
 #                              boundary says never merge or release, so the human makes that
 #                              call
-# The REST forms are what .icm/scripts/merge.sh and release.sh call. The hook reads only the
+# The REST forms are what .icm/_system/scripts/merge.sh and release.sh call. The hook reads only the
 # command line the session types, so the scripts, which carry their own gate, stay allowed.
 # Everything else git does — add, commit, ordinary push, fetch, merge, stash, checkout,
 # switch, restore, branch, tag, worktree, config, gh pr create — is auto-approved.

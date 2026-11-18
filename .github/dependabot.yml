@@ -1,7 +1,7 @@
 # dependabot: security updates only. Switch on "Dependabot security updates" in the repository's
 # settings (Code security). The limit 0 keeps version updates off: Dependabot opens no pull
-# request on the monthly schedule. A security update is not under this limit. The gate check is
-# green on a Dependabot pull request, and a person merges it.
+# request on the monthly schedule. A security update is not under this limit. A person merges
+# a Dependabot pull request (.icm/setup/dependabot-security.md).
 version: 2
 updates:
   - package-ecosystem: npm

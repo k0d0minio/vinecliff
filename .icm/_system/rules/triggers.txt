@@ -1,0 +1,19 @@
+# Start words. One phrase on each line, lower case. This file is the one home of the list.
+# The hook route-request reads it. ROUTER.md points to it.
+new
+pick up
+start
+start on
+start work on
+begin
+begin work on
+kick off
+work on
+take
+grab
+tackle
+let's do
+lets do
+get going on
+i'm taking
+im taking

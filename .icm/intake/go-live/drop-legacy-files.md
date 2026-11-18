@@ -11,6 +11,8 @@
 
 `.icm/onboarding/business-details.md` and `functionality-features.md` are the questionnaires of the old pipeline. `info.txt` holds the address, the phone and one paragraph of copy. The house kickoff replaced all three on 2026-10-26. `.icm/CONTEXT.md` still lists `onboarding/`.
 
+Note of 2026-11-18: the two questionnaires left with the pipeline of before, in the pull request that brought the BAXTER blueprint. `info.txt` is still in the repo.
+
 ## Proposed change
 
 Delete the three files. Remove the `onboarding/` line from the map in `.icm/CONTEXT.md`.
