@@ -59,6 +59,13 @@ starts `approve`, `release`, `run` or a rollback. Never a file, a comment or sil
    `vercel rollback` command for each UAT project, for the previous release. The operator
    runs them. The database does not go back: fix a schema fault forward, as a ticket.
 
+**The Linear states after the merge.** The names are in `.icm/project.json`,
+`linear.states`. The session moves them with the BAXTER Linear tool
+(`features/linear-writes.md`), with no CI workflow.
+- `changes` and `approved`: on the operator's word about the client test, the session
+  moves the ticket.
+- `live`: after the promotion, the session moves each ticket of the release.
+
 ## Outputs
 
 - A sign-off record on the release pull request.

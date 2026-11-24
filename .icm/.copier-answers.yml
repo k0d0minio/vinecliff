@@ -5,7 +5,6 @@ default_branch: main
 language: en
 linear_org: kodominio
 linear_session_writes: true
-linear_states: false
 linear_team_key: JAM
 release_config: false
 slug: vinecliff

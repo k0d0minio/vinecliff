@@ -26,7 +26,8 @@ In a session:
    - It reads the tick, and waits for green checks.
    - `close-out.sh`: it moves the run to `.icm/archive/<id>/` and the ticket stub to
      `_done/`, in one commit. It pushes.
-   - It waits for green checks on the new commit.
+   - It waits for green checks on the new commit. The job `code` does not run again for a
+     commit of records only (`ci/icm-only.sh`).
    - `merge.sh`: it checks the tick, the checks and the conflicts again. Then it merges.
 4. On `RESULT: STOP` with a conflict: merge the default branch into the run's branch,
    push, and run step 3 again. On each other `RESULT: STOP`: stop and give the reason.

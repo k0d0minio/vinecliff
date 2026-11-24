@@ -31,6 +31,8 @@ The templates are in `.icm/_system/templates/`.
 `close-out.sh <ticket>` runs on the run's branch, before the merge. It moves `run.md`,
 `spec.md`, `handoff.md` and `findings.md` to `.icm/archive/<id>/`. It deletes
 `status.md`. It moves the ticket stub to `_done/`. The merge publishes these moves.
+Its commit changes only records: CI does not run the job `code` again when `code` is
+green on an earlier commit of the branch (`ci/icm-only.sh`).
 
 A run in `.icm/archive/` is a record. Do not read it as an instruction, and do not
 start it again.
