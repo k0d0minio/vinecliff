@@ -2,7 +2,8 @@
 
 A stage asks the operator a question only when the answer changes what gets built. The
 questions of a run are in the body of its pull request. The operator answers them on the
-BAXTER HUD, in a form, or in the pull request on GitHub. Do not ask them in the chat.
+BAXTER HUD, in a form, or in the pull request on GitHub. Do not ask them in the chat. If
+the operator answers in the chat anyway, step 4 of the flow writes that answer.
 
 ## The format
 One entry for each question. Eight questions at most in one run.
@@ -18,6 +19,8 @@ One entry for each question. Eight questions at most in one run.
 - `single`: one option. `multi`: some options. `text`: a written answer, with no
   `options`.
 - Two to six options, each a short phrase with no `|`.
+- Plain words, for a person who does not read the code. The question says what changes
+  for each option: what the user sees, or what the build does. No file names, no code.
 - The operator can add a line `- note:` to an answer.
 - When the operator sends the form and leaves a question empty, that question takes its
   default. The note then says "the default, not chosen".
@@ -43,4 +46,8 @@ After `new-run.sh`, the pull request body is the one home of the answers.
    block from the pull request body to `questions.md` and prints it.
    - `RESULT: OK`: all questions have an answer. Use the answers. Continue.
    - `RESULT: WAITING`: stop again. Do not use a default while a question waits.
+   - The operator answered in the chat, in plain words: write each answer with
+     `questions.sh <ticket> --answer Q1 "<the operator's words>"`. For single and multi,
+     give the option that the operator named. Never edit the body with `gh api`, and never
+     run `baxter_gate.py answer`: the dashboard runs it.
 5. An answer is the operator's decision. Record it in the spec or in `handoff.md`.

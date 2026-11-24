@@ -24,8 +24,8 @@ The templates are in `.icm/_system/templates/`.
 4. **One run, one folder.** A run does not write in another run's folder, and it does
    not change `.icm/_system/`.
 5. **A finding is not a task.** If you see a fault that the ticket does not cover, add
-   one entry to `findings.md` and continue with the ticket. The operator files the
-   findings later.
+   one entry to `findings.md` and continue with the ticket. The session files it in
+   Linear: rule 5 of `rules/ticket.md`.
 
 ## The end of a run
 `close-out.sh <ticket>` runs on the run's branch, before the merge. It moves `run.md`,

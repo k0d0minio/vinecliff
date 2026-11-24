@@ -6,7 +6,8 @@ ticket to a green pull request. Each lane contract names what differs from this 
 
 ## Flow
 1. `resolve-run.sh <ticket>`. Continue only on `RESULT: NONE`. On `RESULT: OK` the run
-   exists: read `handoff.md` and continue from it.
+   exists: read `handoff.md` and continue from it. On `conflict: yes`, do its line "Do this first" first
+   (`rules/github.md`, Runs in parallel).
 2. Read the ticket (`rules/ticket.md`). If the work is larger than the lane permits,
    stop and say that the ticket needs `new`.
 3. If the ticket has questions, or you have one that changes the result: write them in
@@ -17,7 +18,7 @@ ticket to a green pull request. Each lane contract names what differs from this 
    the operator says the lane command again, run `questions.sh` and continue.
 5. Make the change on the run's branch. Read `.icm/project-rules.md` first.
 6. Commit and push. Change the pull request to ready (`rules/github.md`).
-7. `ci-status.sh <number> --watch`. On RED, correct the cause and push again.
+7. `ci-status.sh <number> --watch`, one time. On RED, correct the cause and push again.
 8. Set `status.md` to `phase: release`. Write `handoff.md`, with the section How to test:
    1 to 3 short sentences that can be said aloud. Commit and push.
 9. Show the gate card (`rules/gates.md`).

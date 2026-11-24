@@ -31,7 +31,7 @@ Do not read the product code. One search to confirm a name or a path is permitte
 4. Write the acceptance criteria. Each one is a result that a person can see and check.
    Two to five criteria. Do not write how to build it.
 5. Write the draft in the chat: a title, the lane as a label, the problem, the
-   acceptance criteria, the questions. Write nothing in this repo. This pipeline does not write to Linear.
+   acceptance criteria, the questions. Write nothing in this repo. This stage does not write to Linear.
 6. Stop with the stop report of `.icm/_system/rules/output.md`. The operator's acts: file
    the ticket in Linear, then say a start word with its key.
 

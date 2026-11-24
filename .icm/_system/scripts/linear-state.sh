@@ -12,7 +12,7 @@
 # last part of the branch. The API key is LINEAR_API_KEY, a secret of the repo.
 #
 # It moves nothing, and exits 0, when: the event has no state name, no key of this team
-# is found, LINEAR_API_KEY is not set, the ticket is completed or canceled, or the ticket
+# is found, LINEAR_API_KEY is not set (with a notice line for GitHub Actions), the ticket is completed or canceled, or the ticket
 # has the state already. It exits 1 when Linear refuses, does not answer, or has no such
 # ticket or state.
 set -euo pipefail
@@ -48,7 +48,11 @@ if [ -z "$key" ]; then
   key="$(ticket_norm "$(grep -oiE '^[a-z][a-z0-9]{0,9}-[0-9]+' <<<"${branch##*/}" || true)")"
 fi
 [ -n "$key" ] && ticket_valid "$key" || skip "no ticket key of this team in the title or the branch"
-[ -n "${LINEAR_API_KEY:-}" ] || skip "LINEAR_API_KEY is not set"
+if [ -z "${LINEAR_API_KEY:-}" ]; then
+  # A notice in GitHub Actions: the job stays green, and the run page names the missing secret.
+  echo "::notice title=icm-linear::LINEAR_API_KEY is not set. $key did not move. The operator sets the repo secret LINEAR_API_KEY."
+  skip "LINEAR_API_KEY is not set"
+fi
 
 # api <query> <variables as JSON>: print the data of the answer, or stop. The caller
 # reads the output, thus the stop line goes to the error output.

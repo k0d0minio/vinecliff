@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # guard-plaintext-secrets.sh — PreToolUse(Write|Edit|MultiEdit|Bash) guard.
-# Runs from ~/.claude/hooks/ as the machine-wide default, or from a repo's .claude/hooks/,
-# registered in that repo's .claude/settings.json. When the current project ships its own
-# copy, the global one defers to it.
+# The blueprint owns this file (1.0.0-rc18, JAM-439). A render and an update write it to
+# .claude/hooks/ of the repo, and .claude/settings.json of the repo registers it. Do not
+# edit it in a repo: the CI job icm-check fails on a changed copy. A correction is made in
+# the blueprint and comes with the next update. The case rc18-guards.sh of blueprint/tests/
+# tests it. The global copy in ~/.claude/hooks/ yields to this file: one copy runs.
 #
 # Doctrine: never store secrets, tokens, or API keys in plaintext in config or committed
 # files — use environment variables — and flag any credential found. This hook enforces
@@ -20,15 +22,8 @@
 #   exit 0 + permissionDecision "deny" → block, with the reason surfaced to the agent.
 set -euo pipefail
 
-# Defer to a repo-owned copy of this guard, matching block-local-checks.sh: the repo
-# registers it itself, and running both would double-fire on every write.
-# The same file may run as that repo copy: defer only when the repo copy is another file.
-repo_copy="${CLAUDE_PROJECT_DIR:-}/.claude/hooks/guard-plaintext-secrets.sh"
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "$repo_copy" ] \
-  && [ "$(realpath "$repo_copy" 2>/dev/null)" != "$(realpath "$0" 2>/dev/null)" ]; then
-  exit 0
-fi
-
+# No rule "defer to a repo copy" (1.0.0-rc18): this file is the repo copy. The global copy has
+# that rule and yields to this file.
 input="$(cat 2>/dev/null || true)"
 command -v jq >/dev/null 2>&1 || exit 0
 

@@ -50,5 +50,6 @@ deploys production as before.
   Jamie ticks Ready to merge. The Release stage merges.
 - A ticket's merge reaches the UAT environment, where the client tests the batch. Production
   moves only on Jamie's word, after the client's sign-off (`.icm/_system/features/uat.md`).
-- Linear: a session in this repo reads a ticket and does not write to Linear
-  (`.icm/_system/rules/ticket.md`).
+- Linear: a session in this repo reads its ticket and makes its own ticket acts in Linear
+  (a comment, a new issue in Triage, a relation) with the BAXTER Linear tool
+  (`.icm/_system/rules/ticket.md`, `.icm/_system/features/linear-writes.md`).

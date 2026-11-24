@@ -10,6 +10,7 @@
 #   render <template>   print the template with each @NAME@ replaced by the variable NAME
 #   stop <reason>       print "RESULT: STOP <reason>" and exit 1
 #   need <tool>...      stop when a tool is not installed
+#   help_if_asked "$@"  on -h or --help: print the header of the script and exit 0
 
 # In bash 5.2 an "&" in a replacement means "the match". Titles can contain "&".
 shopt -u patsub_replacement 2>/dev/null || true
@@ -46,5 +47,12 @@ need() {
   local t
   for t in "$@"; do
     command -v "$t" >/dev/null 2>&1 || stop "$t is not installed"
+  done
+}
+
+help_if_asked() {
+  local a
+  for a in "$@"; do
+    case "$a" in -h | --help) sed -n '2,/^set -/{/^#/s/^# \{0,1\}//p}' "$0"; exit 0 ;; esac
   done
 }

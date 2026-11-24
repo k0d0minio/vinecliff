@@ -13,8 +13,14 @@
 # Without --lane the run is a spine run: .icm/runs/<id>/spec.md must exist (Define writes it).
 # On the default branch the script makes the run's branch from origin. On another branch
 # it keeps that branch. A markdown stub that is not committed goes onto the run's branch.
+# In a worktree of the Claude application (<repo>/.claude/worktrees/<name>) the script
+# renames the branch of the worktree to the branch of the ticket, and says so.
 # --refresh-body writes the pull request body again from spec.md. All boxes are then not
 # ticked. The script never ticks a gate and never merges.
+#
+# Each step that can fail ends with "RESULT: STOP <reason>". When run.md has "pr: pending"
+# (a commit, a push or GitHub failed), correct the cause and give the same command again:
+# the script continues that run. It finds an open pull request of the branch, or opens one.
 #
 # Last line: "RESULT: OK <pull request url>" or "RESULT: STOP <reason>".
 set -euo pipefail
@@ -22,6 +28,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/lib/project.sh"
 . "$here/lib/ticket.sh"
 . "$here/lib/gh.sh"
+help_if_asked "$@"
 
 ticket="" TITLE="" BRANCH="" URL="" lane="" SUMMARY="" refresh=0
 while [ $# -gt 0 ]; do
@@ -100,68 +107,115 @@ if [ -n "$lane" ]; then
 fi
 LANE="${lane:-spine}"
 ticket_valid "$ticket" || stop "$ticket is not a ticket of this repo (wrong team, or no stub)"
-if [ -e "$run/run.md" ] || [ -e ".icm/archive/$ID" ]; then
-  stop "$ticket has a run. Use build, release or revise. A follow-up needs a new ticket"
+[ ! -e ".icm/archive/$ID" ] || stop "$ticket has a closed run (.icm/archive/$ID). A follow-up needs a new ticket"
+again="Correct the cause, then give the same new-run.sh command again: it continues this run"
+# step <what> <command...>: on a failure, stop with the last line of the error.
+step() {
+  local what="$1" out hint=""; shift
+  out="$("$@" 2>&1)" && return 0
+  case "$out" in *husky* | *hook*) hint=" A git hook of the repo refused it." ;; esac
+  stop "$what failed: $(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n1 | cut -c1-200).$hint $again"
+}
+# unfinished: run.md is here, and its pull request is not recorded, committed and pushed.
+unfinished() {
+  [ "$(field pr "$run/run.md")" = pending ] && return 0
+  [ "$(git show "HEAD:$run/run.md" 2>/dev/null | sed -n 's/^- pr: *//p')" = "$(field pr "$run/run.md")" ] || return 0
+  git rev-parse -q --verify '@{u}' >/dev/null || return 0
+  [ "$(git log -1 --format=%s)" = "chore(icm): record the pull request of $ID" ] \
+    && [ "$(git rev-list --count '@{u}..HEAD')" -gt 0 ]
+}
+resume=0 stub=""
+if [ -e "$run/run.md" ]; then
+  unfinished || stop "$ticket has a run. Use build, release or revise. A follow-up needs a new ticket"
+  resume=1
+  TICKET="$(field ticket "$run/run.md")" TITLE="$(field title "$run/run.md")"
+  URL="$(field link "$run/run.md")" BRANCH="$(field branch "$run/run.md")" LANE="$(field lane "$run/run.md")"
+  [ "$(git symbolic-ref -q --short HEAD || true)" = "$BRANCH" ] \
+    || stop "the run of $ticket is not finished, on the branch $BRANCH. Run: git switch $BRANCH, then this command again"
+  [ "$source" = linear ] || stub="$TICKET"
+  echo "new-run: the start of $ticket did not finish. It continues"
 fi
-[ "$LANE" != spine ] || [ -f "$run/spec.md" ] || stop "write $run/spec.md first. That is the work of Define"
+[ "$resume" -eq 1 ] || [ "$LANE" != spine ] || [ -f "$run/spec.md" ] || stop "write $run/spec.md first. That is the work of Define"
 
-stub=""
-if [ "$source" = linear ]; then
-  TICKET="$(ticket_norm "$ticket")"
-  [ -n "$TITLE" ] && [ -n "$BRANCH" ] && [ -n "$URL" ] || stop "a Linear ticket needs --title, --branch and --url"
-else
-  ref="$(stub_ref "$ticket")"
-  stub=".icm/intake/${ref}.md"
-  TICKET="$stub"
-  URL="\`$stub\`"
-  [ -n "$TITLE" ] || TITLE="$(sed -nE 's/^# +//p' "$stub" | head -n1)"
-  [ -n "$TITLE" ] || TITLE="$ID"
-  case "$ref" in triage/*) BRANCH="triage/$ID" ;; *) BRANCH="$ID" ;; esac
+if [ "$resume" -eq 0 ]; then
+  if [ "$source" = linear ]; then
+    TICKET="$(ticket_norm "$ticket")"
+    [ -n "$TITLE" ] && [ -n "$BRANCH" ] && [ -n "$URL" ] || stop "a Linear ticket needs --title, --branch and --url"
+  else
+    ref="$(stub_ref "$ticket")"
+    stub=".icm/intake/${ref}.md"
+    TICKET="$stub"
+    URL="\`$stub\`"
+    [ -n "$TITLE" ] || TITLE="$(sed -nE 's/^# +//p' "$stub" | head -n1)"
+    [ -n "$TITLE" ] || TITLE="$ID"
+    case "$ref" in triage/*) BRANCH="triage/$ID" ;; *) BRANCH="$ID" ;; esac
+  fi
+
+  current="$(git symbolic-ref -q --short HEAD || true)"
+  [ -n "$current" ] || stop "HEAD is detached. Check out the default branch or the run's branch"
+  excluded=(":(exclude)$run")
+  [ -z "$stub" ] || excluded+=(":(exclude)$stub")
+  dirty="$(git status --porcelain --untracked-files=all -- . "${excluded[@]}")"
+  [ -z "$dirty" ] || stop "the working tree is not clean. Commit or remove the other changes first"
+
+  branch_free() {
+    ! git show-ref --verify --quiet "refs/heads/$BRANCH" \
+      && ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1
+  }
+  if [ "$current" = "$base" ]; then
+    step "git fetch" git fetch -q origin "$base"
+    branch_free || stop "the branch $BRANCH exists. One ticket is one branch"
+    step "the branch $BRANCH" git switch -q -c "$BRANCH" "origin/$base"
+  elif [[ "$PWD" == */.claude/worktrees/* ]] && [ "$current" != "$BRANCH" ]; then
+    branch_free || stop "the branch $BRANCH exists. One ticket is one branch. Run: git switch $BRANCH"
+    step "the rename of the branch $current" git branch -m "$current" "$BRANCH"
+    echo "worktree: the branch $current of the Claude application is now $BRANCH, the branch of the ticket"
+  else
+    BRANCH="$current"
+  fi
+
+  mkdir -p "$run"
+  PR="pending"
+  PHASE="define"
+  [ "$LANE" = spine ] || PHASE="build"
+  render "$sys/templates/run.md" > "$run/run.md"
+  render "$sys/templates/status.md" > "$run/status.md"
+  render "$sys/templates/handoff.md" > "$run/handoff.md"
+  if [ "$source" = linear ] && [ "$LANE" != spine ]; then write_stub "$ID"; fi
 fi
 [ -n "$SUMMARY" ] || SUMMARY="$TITLE"
+# The files of the run, the stub of a Linear lane run, and a markdown stub.
+paths=("$run")
+[ ! -d .icm/intake/tickets ] || paths+=(.icm/intake/tickets)
+[ -z "$stub" ] || paths+=("$stub")
+if [ -n "$(git status --porcelain --untracked-files=all -- "${paths[@]}")" ]; then
+  step "git add" git add -- "${paths[@]}"
+  step "the commit of the run" git commit -q -m "chore(icm): start $ID"
+fi
+step "git push" git push -q -u origin "$BRANCH"
 
-current="$(git symbolic-ref -q --short HEAD || true)"
-[ -n "$current" ] || stop "HEAD is detached. Check out the default branch or the run's branch"
-excluded=(":(exclude)$run")
-[ -z "$stub" ] || excluded+=(":(exclude)$stub")
-dirty="$(git status --porcelain --untracked-files=all -- . "${excluded[@]}")"
-[ -z "$dirty" ] || stop "the working tree is not clean. Commit or remove the other changes first"
-
-if [ "$current" = "$base" ]; then
-  git fetch -q origin "$base" || stop "git fetch failed"
-  if git show-ref --verify --quiet "refs/heads/$BRANCH" \
-    || git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-    stop "the branch $BRANCH exists. One ticket is one branch"
-  fi
-  git switch -q -c "$BRANCH" "origin/$base" || stop "the branch $BRANCH was not made"
+number="$(field pr "$run/run.md" | tr -d '#')"
+if [[ "$number" =~ ^[0-9]+$ ]]; then
+  created="$(gh_pr "$number")" || stop "the pull request #$number was not read. $again"
 else
-  BRANCH="$current"
-fi
-
-mkdir -p "$run"
-PR="pending"
-PHASE="define"
-[ "$LANE" = spine ] || PHASE="build"
-render "$sys/templates/run.md" > "$run/run.md"
-render "$sys/templates/status.md" > "$run/status.md"
-render "$sys/templates/handoff.md" > "$run/handoff.md"
-git add "$run"
-[ -z "$stub" ] || git add "$stub"
-if [ "$source" = linear ] && [ "$LANE" != spine ]; then
-  write_stub "$ID"
-  git add .icm/intake/tickets
-fi
-git commit -q -m "chore(icm): start $ID"
-git push -q -u origin "$BRANCH" || stop "git push failed. The run is committed on $BRANCH"
-
 make_body
-created="$(gh api -X POST "repos/${repo}/pulls" -f title="$(pr_title_for "$ticket" "$TITLE")" \
-  -f head="$BRANCH" -f base="$base" -F draft=true -F body=@"$body_file")" \
-  || stop "GitHub did not open the pull request. The branch $BRANCH is pushed"
+pulls="$(gh api "repos/${repo}/pulls?state=open&head=${repo%%/*}:${BRANCH}&per_page=100")" \
+  || stop "GitHub was not read. The branch $BRANCH is pushed. $again"
+created="$(jq -c --arg b "$BRANCH" '[.[] | select(.head.ref == $b)] | first // empty' <<<"$pulls")"
+if [ -n "$created" ]; then
+  echo "new-run: the pull request #$(jq -r '.number' <<<"$created") of $BRANCH is open. It is the run's"
+else
+  created="$(gh api -X POST "repos/${repo}/pulls" -f title="$(pr_title_for "$ticket" "$TITLE")" \
+    -f head="$BRANCH" -f base="$base" -F draft=true -F body=@"$body_file")" \
+    || stop "GitHub did not open the pull request. The branch $BRANCH is pushed. $again"
+fi
 number="$(jq -r '.number' <<<"$created")"
 sed -i "s|^- pr: .*|- pr: #${number}|" "$run/run.md"
-git commit -q -m "chore(icm): record the pull request of $ID" -- "$run/run.md"
-git push -q
+fi
+if ! git diff --quiet HEAD -- "$run/run.md"; then
+  step "the commit of the pull request number" git commit -q -m "chore(icm): record the pull request of $ID" -- "$run/run.md"
+fi
+step "git push" git push -q -u origin "$BRANCH"
 # A question waits: show the question dialog on the BAXTER HUD now. The dialog must not
 # depend on a session that remembers to show it. No HUD on this computer: nothing happens.
 hud="${ICM_HUD:-$HOME/baxter_live/system/bin/baxter_gate.py}"

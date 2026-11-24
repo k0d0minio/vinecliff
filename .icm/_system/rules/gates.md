@@ -9,7 +9,8 @@ The operator ticks a gate in one of two ways:
   BAXTER HUD. The HUD then ticks that one box. The press is the operator's act.
 
 To show the gate card, run `~/baxter_live/system/bin/baxter_gate.py card <number>`, if that file
-exists. For a page change, start the agent `review-shots` first. The card shows the
+exists. For a page change, start the agent `review-shots` first: it takes the pictures
+from the local dev server (`dev-server.sh`), else from the preview. The card shows the
 summary, How to test of `handoff.md`, the checks and the preview.
 
 After the tick, the card has the button "Merge now". It runs the Release stage
@@ -36,8 +37,9 @@ not ticked and give the pull request link.
 ## What enforces a gate
 - Build stops when `spec_approved` is not `yes`.
 - `release.sh` and `merge.sh` refuse when `ready_to_merge` is not `yes`.
-- The CI job `icm-gate` fails while Ready to merge is not ticked. The repo ruleset
-  requires that job, so GitHub refuses the merge too.
+- The check `icm-gate` shows "Waits for the operator" (action required) while Ready to
+  merge is not ticked. A ruleset that requires it makes GitHub refuse the merge too.
 
-`ci-status.sh` does not count `icm-gate`. A pull request that waits only for the tick
-is GREEN.
+That wait is not a failure. `ci-status.sh` does not count `icm-gate`: a pull request that
+waits only for the tick is GREEN. A review or a status report says "waits for the
+operator's tick", never "icm-gate failed".

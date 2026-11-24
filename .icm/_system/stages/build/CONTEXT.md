@@ -13,7 +13,8 @@ Make the change that the approved spec describes, on the run's branch, until CI 
 
 ## Process
 1. `.icm/_system/scripts/resolve-run.sh <ticket>`. Continue only on `RESULT: OK`. If it
-   names another branch, switch to that branch and run it again.
+   names another branch, switch to that branch and run it again. On `conflict: yes`, do its
+   line "Do this first" first (`rules/github.md`, Runs in parallel).
 2. Read `spec_approved` in its output. If the value is not `yes`, stop. Tell the operator
    to tick Spec approved, and give the pull request link.
 3. `resolve-run.sh <ticket> --write-stub`. For a Linear ticket it writes the intake stub.
@@ -23,7 +24,7 @@ Make the change that the approved spec describes, on the run's branch, until CI 
    incomplete, stop and say `revise` is necessary. Do not decide a requirement here.
 6. Commit small and push. Merge the default branch into the run's branch when it moved.
 7. Change the pull request to ready (`rules/github.md`).
-8. `.icm/_system/scripts/ci-status.sh <number> --watch`. On RED, read the failed check,
+8. `.icm/_system/scripts/ci-status.sh <number> --watch`, one time. On RED, read the failed check,
    correct the cause, push and read again. On PENDING after the wait, stop and say so.
 9. Check each acceptance criterion as its `verify:` says: `CI` by the green run and not
    by hand, `agent` on the preview. Write in `handoff.md` which criteria are met. Write

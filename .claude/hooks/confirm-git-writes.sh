@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# confirm-git-writes.sh — global PreToolUse(Bash) guard.
-# Home: ~/.claude/hooks/confirm-git-writes.sh, registered in ~/.claude/settings.json.
+# confirm-git-writes.sh — PreToolUse(Bash) guard.
+# The blueprint owns this file (1.0.0-rc18, JAM-439). A render and an update write it to
+# .claude/hooks/ of the repo, and .claude/settings.json of the repo registers it. Do not
+# edit it in a repo: the CI job icm-check fails on a changed copy. A correction is made in
+# the blueprint and comes with the next update. The case rc18-guards.sh of blueprint/tests/
+# tests it.
 #
 # Doctrine: this machine runs in auto mode, and CLAUDE.md declares outward git work
 # autonomous — "your job ends at git push", PRs open without asking. So the ordinary loop
@@ -17,8 +21,9 @@
 #                              (gh api -X PUT …/merge, gh api -X POST …/merges); the house
 #                              boundary says never merge or release, so the human makes that
 #                              call
-# The REST forms are what .icm/_system/scripts/merge.sh and release.sh call. The hook reads only the
-# command line the session types, so the scripts, which carry their own gate, stay allowed.
+# The REST forms are what .icm/_system/scripts/merge.sh and promote.sh call. The hook reads
+# only the command line the session types, so the scripts, which carry their own gate, stay
+# allowed.
 # Everything else git does — add, commit, ordinary push, fetch, merge, stash, checkout,
 # switch, restore, branch, tag, worktree, config, gh pr create — is auto-approved.
 # `worktree` and `config` are deliberately NOT guarded: the built-in worktree flow
@@ -37,15 +42,8 @@
 # message mentioning "rebase" — is never caught.
 set -euo pipefail
 
-# Defer to a repo-owned copy of this guard, matching block-local-checks.sh: the repo
-# defines its own semantics and registers the hook itself.
-# The same file may run as that repo copy: defer only when the repo copy is another file.
-repo_copy="${CLAUDE_PROJECT_DIR:-}/.claude/hooks/confirm-git-writes.sh"
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "$repo_copy" ] \
-  && [ "$(realpath "$repo_copy" 2>/dev/null)" != "$(realpath "$0" 2>/dev/null)" ]; then
-  exit 0
-fi
-
+# No rule "defer to a repo copy" (1.0.0-rc18): this file is the repo copy, and no global copy
+# of this guard is registered.
 input="$(cat 2>/dev/null || true)"
 command -v jq >/dev/null 2>&1 || exit 0            # no jq → can't parse → fail open
 cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null || true)"
