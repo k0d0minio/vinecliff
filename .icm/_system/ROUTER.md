@@ -40,16 +40,19 @@ When the hook `route-request` prints `[icm-router] Route:`, follow that line. If
 8. Write the documents of a run in the language at the top of this file.
 9. **Use no MCP tool but the server `baxter`.** Do not call a tool whose name starts with
    `mcp__` (a connector of Claude: Linear, GitHub, Vercel, Google and all others). A tool
-   `mcp__baxter__<name>` is of BAXTER: it is permitted. This rule applies to each subagent
-   also. Use the tools of BAXTER (section "On this computer"). For git and GitHub, use `git`
-   and `gh`. If no BAXTER tool does the work, stop and tell the operator. Do not use an MCP
-   tool in its place. The hook `guard-system` refuses each other MCP tool call.
+   `mcp__baxter__<name>` is of BAXTER: it is permitted. The tools of four servers of the
+   Claude app are also permitted: `mcp__ccd_turn__*`, `mcp__ccd_session__*`,
+   `mcp__ccd_pr__*` (not `set_auto_merge`) and `mcp__ccd_view__*`.
+   This rule applies to each subagent also. Use the tools of BAXTER (section "On this
+   computer"). For git and GitHub, use `git` and `gh`. If no BAXTER tool does the work, stop
+   and tell the operator. Do not use an MCP tool in its place. The hook `guard-system`
+   refuses each other MCP tool call.
 
 ## On this computer
 This session runs on the computer of BAXTER, the assistant of the operator. The records and
 the tools of BAXTER are here. Use them in place of a connector of Claude. The tools
-`mcp__baxter__*` exist only when BAXTER started this session: with no such tool, use the
-command.
+`mcp__baxter__*` exist in a session that BAXTER started and in a session that the operator
+started on this computer. With no such tool, use the command.
 
 | To read | Use |
 |---|---|

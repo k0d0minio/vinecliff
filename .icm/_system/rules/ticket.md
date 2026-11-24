@@ -14,10 +14,10 @@ Linear is the source of the tickets. The business scopes the work in Linear.
    If the BAXTER read fails, stop and give its error. Do not work from memory.
    Give the title, the branch and the URL to a script as flags.
    A session that BAXTER started uses the command of its first message.
-5. **The session makes its own ticket acts in Linear.** It uses the
-   BAXTER Linear tool, with no yes for each write: a comment on the run's ticket, a new
-   issue in Triage, a relation. Read `.icm/_system/features/linear-writes.md` before the
-   first write. Each act has its entry in `findings.md`.
+5. **The session makes its own ticket acts in Linear.** It uses the BAXTER Linear tool,
+   with no yes for each write: a comment, a Triage issue, a relation, and the state of the
+   run's ticket at each event of `linear.states` in `.icm/project.json`. No CI workflow
+   moves a state. Read `.icm/_system/features/linear-writes.md` before the first write.
 6. **No bulk sync.** A ticket enters this repo only when the operator starts it.
 
 ## One key, three spellings

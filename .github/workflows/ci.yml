@@ -59,8 +59,39 @@ jobs:
       - name: actionlint
         run: ./actionlint -color
 
+  icm-only:
+    # A push to a pull request that changes only the records of a run (the close-out
+    # commit of release.sh) does not run the jobs code and database again, when the check
+    # code is green on an earlier commit of the branch (rc25, JAM-570). Each doubt gives the
+    # full CI. The rules are in .icm/_system/ci/icm-only.sh. A push to the default branch
+    # always runs the full CI.
+    if: github.event_name == 'pull_request' && github.event.action == 'synchronize' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      skip: ${{ steps.records.outputs.skip }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .icm/_system/ci
+          persist-credentials: false
+      - id: records
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.pull_request.head.sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash .icm/_system/ci/icm-only.sh
+
   code:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    # "!cancelled()": the job runs when the job icm-only is skipped (a push to the default
+    # branch, a new pull request) or fails.
+    needs: icm-only
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.icm-only.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     concurrency:
       group: code-${{ github.ref }}
@@ -85,7 +116,8 @@ jobs:
   release:
     # release-please keeps one release pull request open: the batch since the last release.
     # Its merge makes the tag v* and the changelog. It moves nothing to production.
-    if: github.event_name == 'push'
+    # The condition names the job code: the job icm-only is skipped on a push.
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.code.result == 'success' }}
     needs: code
     runs-on: ubuntu-latest
     permissions:
