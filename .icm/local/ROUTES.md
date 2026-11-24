@@ -14,13 +14,27 @@ that path is not in the repo now.
 
 A ticket is now a Linear key of the team `JAM`. A stub is not a ticket.
 
-1. To work on a stub, the operator asks BAXTER for its Linear ticket. BAXTER makes it from the
+1. To work on a stub, use its Linear ticket (the table below). For a new stub, the operator asks BAXTER for the ticket. BAXTER makes it from the
    stub: the title, the sections, and the path of the stub.
 2. Start the work with the Linear key, as the router says.
 3. In the pull request of that ticket, move the stub into its `_done/` folder.
 4. Do not start a run from a stub path: the blueprint of this repo refuses it.
 
 `.icm/intake/README.md` has the order of the epics.
+
+The Linear tickets of the open stubs of `go-live` (made on 2026-11-18):
+
+| Stub | Ticket |
+|---|---|
+| `uat-environment` | JAM-253. The ticket has the model of the BAXTER blueprint. The stub has the model of before |
+| `drop-legacy-files` | JAM-263 |
+| `farmhouse-two-units` | JAM-264 |
+| `brand-from-the-logo` | JAM-265 |
+| `admin-password-change` | JAM-266 |
+| `site-on-the-domain` | JAM-267 |
+| `email-from-info` | JAM-268 |
+| `error-tracking` | JAM-269 |
+| `legal-pages` | JAM-270 |
 
 ## The setup acts
 
