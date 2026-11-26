@@ -11,8 +11,8 @@
 #
 # A lane is the name of a folder of .icm/_system/lanes/ that has a CONTEXT.md.
 # Without --lane the run is a spine run: .icm/runs/<id>/spec.md must exist (Define writes it).
-# On the default branch the script makes the run's branch from origin. On another branch
-# it keeps that branch. A markdown stub that is not committed goes onto the run's branch.
+# On the default branch the script makes the run's branch from origin. On the run's branch
+# it continues. On another branch it stops before a commit. A markdown stub that is not committed goes onto the run's branch.
 # In a worktree of the Claude application (<repo>/.claude/worktrees/<name>) the script
 # renames the branch of the worktree to the branch of the ticket, and says so.
 # --refresh-body writes the pull request body again from spec.md. All boxes are then not
@@ -170,8 +170,9 @@ if [ "$resume" -eq 0 ]; then
     branch_free || stop "the branch $BRANCH exists. One ticket is one branch. Run: git switch $BRANCH"
     step "the rename of the branch $current" git branch -m "$current" "$BRANCH"
     echo "worktree: the branch $current of the Claude application is now $BRANCH, the branch of the ticket"
-  else
-    BRANCH="$current"
+  elif [ "$current" != "$BRANCH" ]; then
+    # A new run never goes on the branch of a different ticket (JAM-604).
+    stop "you are on $current, not $base. Run: git switch $base, then this command again"
   fi
 
   mkdir -p "$run"

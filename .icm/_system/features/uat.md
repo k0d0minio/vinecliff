@@ -66,6 +66,9 @@ starts `approve`, `release`, `run` or a rollback. Never a file, a comment or sil
   moves the ticket.
 - `live`: after the promotion, the session moves each ticket of the release.
 
+- The test accounts of the BAXTER checktest and the contract of the seed script of this
+  repo: `.icm/setup/checktest-accounts.md`.
+
 ## Outputs
 
 - A sign-off record on the release pull request.

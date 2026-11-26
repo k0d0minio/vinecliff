@@ -19,6 +19,8 @@
 #      register one of the three guards
 #   3. a pull request changes .icm/_system/ or a guard and does not change
 #      .icm/_system/VERSION
+#   4. a client request of .icm/requests/ breaks the form of features/requests.md
+#      (1.0.0-rc27): check-request.sh names each fault
 # The gate is the box below <!-- gate:ready-to-merge -->. A body with no such anchor
 # passes: the gate is not required there. merge.sh refuses while the box is not ticked.
 set -euo pipefail
@@ -112,6 +114,12 @@ if [ -n "${GITHUB_BASE_REF:-}" ]; then
   if [ -n "$changed" ] && ! grep -qxF "$sys/VERSION" <<<"$changed"; then
     fault "this pull request changes $sys/ or a guard of .claude/hooks/, and not $sys/VERSION. Only a blueprint update changes them"
   fi
+fi
+
+# 4. Each client request has the form of features/requests.md (1.0.0-rc27).
+if compgen -G ".icm/requests/REQ-*.md" >/dev/null; then
+  out="$(bash "$sys/scripts/check-request.sh" .icm/requests/REQ-*.md 2>&1)" \
+    || fault "a client request breaks the form of $sys/features/requests.md: $(grep '^fault:' <<<"$out" | tr '\n' ' ')"
 fi
 
 if [ "$faults" -gt 0 ]; then

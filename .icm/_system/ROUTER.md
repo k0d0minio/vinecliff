@@ -29,7 +29,7 @@ When the hook `route-request` prints `[icm-router] Route:`, follow that line. If
 ## Rules for each stage and lane
 1. Read the contract. Then read only the files that its Inputs name.
 2. First act: `.icm/_system/scripts/resolve-run.sh <ticket>`. Obey its `RESULT:` line.
-3. A run writes only in `.icm/runs/<id>/` and in the product code, on its own branch.
+3. A run writes only in `.icm/runs/<id>/`, the product code and its client requests, on its own branch.
 4. Never tick a gate box. Read `.icm/_system/rules/gates.md`.
 5. Do not run a local build, test, lint or format command. CI is the source of truth.
    Read it with `.icm/_system/scripts/ci-status.sh`.
@@ -71,6 +71,7 @@ started on this computer. With no such tool, use the command.
 | Fact | Home |
 |---|---|
 | Ticket rules and the intake folder | `.icm/_system/rules/ticket.md` |
+| Client requests, a convention against a request | `.icm/_system/features/requests.md` |
 | Gates | `.icm/_system/rules/gates.md` |
 | Questions for the operator | `.icm/_system/rules/questions.md` |
 | Git and GitHub | `.icm/_system/rules/github.md` |

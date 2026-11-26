@@ -30,7 +30,8 @@ Make the change that the approved spec describes, on the run's branch, until CI 
    by hand, `agent` on the preview. Write in `handoff.md` which criteria are met. Write
    the section How to test from the `operator` criteria: 1 to 3 short sentences that
    can be said aloud. Do not tick a box.
-10. Set `status.md` to `phase: release`. Commit and push.
+10. Set `status.md` to `phase: release`, and the status of each client request of the
+    spec to `built` (`features/requests.md`). Commit and push.
 11. Show the gate card (`rules/gates.md`).
 12. Stop with the stop report. The operator's acts: test the change on the preview,
     tick **Ready to merge** on GitHub or on the HUD card, then say `release <ticket>`.

@@ -10,6 +10,7 @@ no product code, makes no branch and opens no pull request. It does not start th
 - The operator's message: what is wrong or what is wanted.
 - `.icm/_system/rules/ticket.md`.
 - `.icm/project-rules.md`, only for the names of things.
+- `.icm/_system/features/requests.md`, when the words are the client's.
 
 Do not read the product code. One search to confirm a name or a path is permitted.
 
@@ -29,7 +30,9 @@ Do not read the product code. One search to confirm a name or a path is permitte
    default. The operator answers them on the HUD when the run starts. If the message is
    sufficient, write no question.
 4. Write the acceptance criteria. Each one is a result that a person can see and check.
-   Two to five criteria. Do not write how to build it.
+   Two to five criteria. Do not write how to build it. When the words are the client's
+   (a mail, a meeting, a call), first write the client request
+   (`features/requests.md`), and copy its AC lines: `<id>#AC-<n>: WHEN ...`.
 5. Write the draft in the chat: a title, the lane as a label, the problem, the
    acceptance criteria, the questions. Write nothing in this repo. This stage does not write to Linear.
 6. Stop with the stop report of `.icm/_system/rules/output.md`. The operator's acts: file

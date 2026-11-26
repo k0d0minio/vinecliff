@@ -4,7 +4,8 @@
 #   node_pm              pnpm | yarn | npm, from the lockfile at the top of the repo
 #   node_has <script>    0 when package.json names the script
 #   node_run <script>    run the script with the package manager, when package.json names it
-#   node_install         install the dependencies from the lockfile, with no change to it
+#   node_install         install the dependencies from the lockfile, with no change to it.
+#                        With no package.json: nothing to install, exit 0 (rc26)
 
 node_pm() {
   if [ -f pnpm-lock.yaml ]; then echo pnpm
@@ -22,6 +23,7 @@ node_run() {
 }
 
 node_install() {
+  [ -f package.json ] || { echo "[node] no package.json: nothing to install"; return 0; }
   case "$(node_pm)" in
     pnpm) corepack enable >/dev/null 2>&1 || true; pnpm install --frozen-lockfile ;;
     yarn) corepack enable >/dev/null 2>&1 || true; yarn install --frozen-lockfile ;;

@@ -21,7 +21,10 @@ In a session:
 1. `.icm/_system/scripts/resolve-run.sh <ticket>`. Continue only on `RESULT: OK`.
 2. Read `ready_to_merge` in its output. If the value is not `yes`, stop. Tell the
    operator to tick Ready to merge, and give the pull request link.
-3. `.icm/_system/scripts/release.sh <number>`. It does these steps, and each step can
+3. For each client request in `- requests:` of the spec: when the newest checktest run
+   shows `passed` for each of its AC lines, set its status to `verified`, commit and
+   push (`features/requests.md`). Never set `accepted`.
+4. `.icm/_system/scripts/release.sh <number>`. It does these steps, and each step can
    stop it:
    - It reads the tick, and waits for green checks.
    - `close-out.sh`: it moves the run to `.icm/archive/<id>/` and the ticket stub to
@@ -29,9 +32,9 @@ In a session:
    - It waits for green checks on the new commit. The job `code` does not run again for a
      commit of records only (`ci/icm-only.sh`).
    - `merge.sh`: it checks the tick, the checks and the conflicts again. Then it merges.
-4. On `RESULT: STOP` with a conflict: merge the default branch into the run's branch,
-   push, and run step 3 again. On each other `RESULT: STOP`: stop and give the reason.
-5. Stop with the stop report: the merge commit, and each act that is left for the
+5. On `RESULT: STOP` with a conflict: merge the default branch into the run's branch,
+   push, and run step 4 again. On each other `RESULT: STOP`: stop and give the reason.
+6. Stop with the stop report: the merge commit, and each act that is left for the
    operator.
 
 Only three things can stop a merge: no tick, a check that is not green, and a conflict.

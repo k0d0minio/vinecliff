@@ -10,6 +10,7 @@ request. Define writes no product code.
 - The ticket. Read it as `.icm/_system/rules/ticket.md` says.
 - The operator's message, for what the ticket leaves open.
 - `.icm/_system/templates/spec.md`.
+- The client requests that the ticket names, and `.icm/_system/features/requests.md`.
 - `.icm/project-rules.md`, only to name real paths in `touches:`.
 
 Do not read the wider codebase. A few searches to confirm a path are permitted.
@@ -26,6 +27,9 @@ Do not read the wider codebase. A few searches to confirm a path are permitted.
 4. Write `.icm/runs/<id>/spec.md` from the template, with your default for each question.
    Each acceptance criterion is a result that a person can see and check. It ends with
    who verifies it: `(verify: CI)`, `(verify: agent)` or `(verify: operator)`. Put each thing that you will not do in Out of scope.
+   Cite the client requests in `- requests:` and keep their AC lines as they are. A
+   convention against a request: write `conflicts:` and ask, as `features/requests.md`
+   says. Do not change the request. Set its status to `specified`.
 5. `.icm/_system/scripts/validate-spec.sh <ticket>`. Correct each line that it lists.
 6. `.icm/_system/scripts/new-run.sh <ticket>` with the flags that `rules/ticket.md` asks
    for, and `--summary "<one sentence: what a user can do after this change>"`. It makes

@@ -6,5 +6,11 @@
   "linear": {
     "team_key": "JAM",
     "org": "kodominio"
+  },
+  "requests": {
+    "store": "linear",
+    "linear_team": "JAM",
+    "linear_label": "source/client",
+    "linear_project": ""
   }
 }
